@@ -5,28 +5,30 @@
 @tailwind utilities;
 
 :root {
-  /* Earthy, calm, desaturated palette */
-  --background: 40 20% 97%;      /* Off-white, paper-like */
-  --foreground: 210 11% 15%;     /* Soft charcoal black */
+  --background: 240 67% 5%;      /* #040414 */
+  --foreground: 0 0% 100%;       /* White text */
   
-  --primary: 27 15% 35%;         /* Deep clay/earth */
-  --primary-foreground: 40 20% 97%;
+  --primary: 0 0% 100%;          /* White */
+  --primary-foreground: 240 67% 5%;
 
-  --secondary: 40 10% 90%;       /* Subtle beige */
-  --secondary-foreground: 210 11% 15%;
+  --secondary: 215 60% 6%;       /* #040C18 */
+  --secondary-foreground: 0 0% 100%;
 
-  --muted: 40 10% 90%;
-  --muted-foreground: 210 8% 45%;
+  --muted: 210 44% 8%;           /* #0B141D */
+  --muted-foreground: 0 0% 70%;
 
-  --accent: 27 15% 35%;
-  --accent-foreground: 40 20% 97%;
+  --accent: 210 44% 15%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 40% 45%;      /* Muted red */
-  --destructive-foreground: 40 20% 97%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 210 8% 85%;
-  --input: 210 8% 85%;
-  --ring: 27 15% 35%;
+  --border: 210 44% 15%;
+  --input: 210 44% 15%;
+  --ring: 0 0% 100%;
+
+  --card: 210 44% 8%;            /* #0B141D */
+  --card-foreground: 0 0% 100%;
 
   --font-sans: 'DM Sans', sans-serif;
   --font-display: 'Libre Baskerville', serif;
