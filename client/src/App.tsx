@@ -3,16 +3,34 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+// import { ScrollToTop } from "@/components/ui/scroll-to-top"; // We'll create a small utility for this if needed, or just standard router behavior
 import NotFound from "@/pages/not-found";
+import Manifesto from "@/pages/Manifesto";
+import Services from "@/pages/Services";
+import Diagnosis from "@/pages/Diagnosis";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
+
+// Scroll to top on route change component
+function ScrollToTopWrapper() {
+  const [pathname] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 function Router() {
   return (
-    <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <ScrollToTopWrapper />
+      <Switch>
+        <Route path="/" component={Manifesto} />
+        <Route path="/services" component={Services} />
+        <Route path="/diagnosis" component={Diagnosis} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 
