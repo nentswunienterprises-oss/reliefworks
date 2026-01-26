@@ -16,7 +16,7 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         <Link href="/" className="group flex flex-col items-end">
           <span className="font-display text-xl font-bold tracking-tight text-primary leading-none">Relief Works</span>
-          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground group-hover:text-primary transition-colors leading-none pr-1">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground group-hover:text-primary transition-colors leading-none pr-3">
             Technologies
           </span>
         </Link>
