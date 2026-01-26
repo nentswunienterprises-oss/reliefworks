@@ -40,10 +40,6 @@ export function Footer() {
               Diagnosis
             </Link>
           </nav>
-
-          <div className="text-xs text-muted-foreground/60">
-            Design by Relief Works
-          </div>
         </div>
       </div>
     </footer>
