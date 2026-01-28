@@ -1,0 +1,27 @@
+# Railway deployment configuration
+# This file documents the deployment setup for Relief Works API
+
+[build]
+# Install dependencies
+builder = "nixpacks"
+
+[env]
+# Supabase Database Configuration
+DATABASE_URL = "postgresql://postgres:Rapismylife20@db.pzqhneluoquohtskfwkr.supabase.co:5432/postgres"
+SUPABASE_URL = "https://pzqhneluoquohtskfwkr.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6cWhuZWx1b3F1b2h0c2tmd2tyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTYwOTUzOCwiZXhwIjoyMDg1MTg1NTM4fQ.0O70N8dP08Vxlf7YUqkEWQ5BYMJQJd230Thl_5B2y5Q"
+
+# Server Configuration
+NODE_ENV = "production"
+PORT = "5000"
+
+[deploy]
+# Build command to create production bundle
+buildCommand = "npm run build"
+
+# Start command to run the server
+startCommand = "node dist/index.cjs"
+
+# Health check
+healthcheckPath = "/"
+healthcheckTimeout = 100

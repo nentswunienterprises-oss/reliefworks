@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
+  "framework": "vite",
+  "env": [
+    {
+      "key": "VITE_SUPABASE_URL",
+      "value": "https://pzqhneluoquohtskfwkr.supabase.co",
+      "description": "Your Supabase project URL (backend via Edge Functions)"
+    }
+  ]
+}

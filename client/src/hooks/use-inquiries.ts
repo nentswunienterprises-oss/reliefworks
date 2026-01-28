@@ -2,14 +2,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type InsertInquiry } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://pzqhneluoquohtskfwkr.supabase.co";
+const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/create-inquiry`;
+
 export function useCreateInquiry() {
   const { toast } = useToast();
   
   return useMutation({
     mutationFn: async (data: InsertInquiry) => {
       const validated = api.inquiries.create.input.parse(data);
-      const res = await fetch(api.inquiries.create.path, {
-        method: api.inquiries.create.method,
+      const res = await fetch(EDGE_FUNCTION_URL, {
+        method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validated),
       });
