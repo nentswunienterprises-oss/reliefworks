@@ -15,6 +15,8 @@ export function useCreateInquiry() {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validated),
+        mode: 'cors',
+        credentials: 'omit',
       });
 
       if (!res.ok) {
