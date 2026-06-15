@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertInquirySchema, type InsertInquiry } from "@shared/schema";
@@ -12,6 +13,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 
 export function DiagnosisForm() {
   const { mutate, isPending } = useCreateInquiry();
+  const [isPressureTypeOpen, setIsPressureTypeOpen] = useState(false);
   
   const form = useForm<InsertInquiry>({
     resolver: zodResolver(insertInquirySchema),
@@ -104,15 +106,23 @@ export function DiagnosisForm() {
             control={form.control}
             name="pressureType"
             render={({ field }) => (
-              <FormItem>
+              <FormItem
+                className={`transition-[padding] duration-200 ${
+                  isPressureTypeOpen ? "pb-44 md:pb-48" : ""
+                }`}
+              >
                 <FormLabel className="text-xs uppercase tracking-wider text-muted-foreground">Where do you feel the pressure?</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onOpenChange={setIsPressureTypeOpen}
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger className="h-12 bg-background border-border/50 focus:border-primary/50">
                       <SelectValue placeholder="Select a diagnosis area" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent sideOffset={8}>
                     <SelectItem value="Friction">Friction — Things feel heavy and slow</SelectItem>
                     <SelectItem value="Limitation">Limitation — Is this idea even possible?</SelectItem>
                     <SelectItem value="Incoherence">Incoherence — We don't feel like ourselves</SelectItem>
