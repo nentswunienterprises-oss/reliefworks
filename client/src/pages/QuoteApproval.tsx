@@ -121,7 +121,9 @@ export default function QuoteApproval() {
                   <p className="text-sm text-destructive">Approval failed. This quote might be expired.</p>
                 )}
                 {quoteQuery.data.status === "approved" && (
-                  <p className="text-sm text-primary">Quote approved successfully. Relief Works will continue with next steps.</p>
+                  <p className="text-sm text-primary">
+                    Quote approved successfully. An invoice has been sent to your email. Please check your inbox.
+                  </p>
                 )}
               </>
             )}
