@@ -31,6 +31,7 @@ function encodeValue(value: string): string {
 function buildSignature(baseParams: Record<string, string>, passphrase?: string): string {
   const query = Object.entries(baseParams)
     .filter(([, value]) => value !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${encodeValue(value)}`)
     .join("&");
 
@@ -121,6 +122,7 @@ export function createPayfastPaymentUrl(
   const signature = buildSignature(params, config.passphrase);
   const query = Object.entries(params)
     .filter(([, value]) => value !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${encodeValue(value)}`)
     .join("&");
 

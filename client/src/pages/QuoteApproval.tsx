@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
 import { api } from "@shared/routes";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -99,14 +98,11 @@ export default function QuoteApproval() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/70 p-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="text-2xl font-semibold text-primary">
-                      {quoteQuery.data.currency} {quoteQuery.data.totalAmount}
-                    </p>
-                  </div>
-                  <Badge variant="outline">{quoteQuery.data.status}</Badge>
+                <div className="rounded-xl border border-border/60 bg-background/70 p-4">
+                  <p className="text-sm text-muted-foreground">Total</p>
+                  <p className="text-2xl font-semibold text-primary">
+                    {quoteQuery.data.currency} {quoteQuery.data.totalAmount}
+                  </p>
                 </div>
 
                 <Button
