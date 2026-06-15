@@ -1,9 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api, type InsertInquiry } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://pzqhneluoquohtskfwkr.supabase.co";
-const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/create-inquiry`;
 
 export function useCreateInquiry() {
   const { toast } = useToast();
@@ -11,12 +8,13 @@ export function useCreateInquiry() {
   return useMutation({
     mutationFn: async (data: InsertInquiry) => {
       const validated = api.inquiries.create.input.parse(data);
-      const res = await fetch(EDGE_FUNCTION_URL, {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(api.inquiries.create.path, {
+        method: api.inquiries.create.method,
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(validated),
-        mode: 'cors',
-        credentials: 'omit',
+        credentials: "include",
       });
 
       if (!res.ok) {
@@ -24,7 +22,8 @@ export function useCreateInquiry() {
           const error = api.inquiries.create.responses[400].parse(await res.json());
           throw new Error(error.message);
         }
-        throw new Error('Failed to submit inquiry');
+
+        throw new Error("Failed to submit inquiry");
       }
 
       return api.inquiries.create.responses[201].parse(await res.json());
@@ -39,7 +38,7 @@ export function useCreateInquiry() {
     onError: (error) => {
       toast({
         title: "Submission Failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Failed to submit inquiry",
         variant: "destructive",
       });
     }
