@@ -49,8 +49,7 @@ export default function Manifesto() {
                 <p className="text-lg text-muted-foreground leading-relaxed">
                   When a system requires excessive force to operate, it is
                   broken. Most modern technology adds weight rather than
-                  removing it. Notifications, dashboards, endless configurations
-                  - these are not features; they are friction.
+                  removing it.
                 </p>
               </motion.div>
 
