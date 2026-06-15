@@ -9,6 +9,9 @@ import {
   inquiries,
 } from './schema.ts';
 
+const jsonDate = z.coerce.date();
+const jsonDateNullable = jsonDate.nullable();
+
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
@@ -49,7 +52,7 @@ export const adminDashboardSummarySchema = z.object({
       role: z.string().nullable(),
       pressureType: z.string(),
       message: z.string(),
-      createdAt: z.date().nullable(),
+      createdAt: jsonDateNullable,
     }),
   ),
 });
@@ -63,8 +66,8 @@ export const adminClientSchema = z.object({
   companyName: z.string().nullable(),
   status: z.string(),
   notes: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
 });
 
 export const adminProjectSchema = z.object({
@@ -78,10 +81,10 @@ export const adminProjectSchema = z.object({
   currency: z.string(),
   oneOffAmount: z.string().nullable(),
   monthlyRetainerAmount: z.string().nullable(),
-  startDate: z.date().nullable(),
-  endDate: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  startDate: jsonDateNullable,
+  endDate: jsonDateNullable,
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
 });
 
 export const adminQuoteSchema = z.object({
@@ -99,10 +102,10 @@ export const adminQuoteSchema = z.object({
   taxAmount: z.string(),
   totalAmount: z.string(),
   approvalToken: z.string().nullable(),
-  approvedAt: z.date().nullable(),
-  expiresAt: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  approvedAt: jsonDateNullable,
+  expiresAt: jsonDateNullable,
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
 });
 
 export const adminCreateQuoteInputSchema = z.object({
@@ -132,14 +135,14 @@ export const adminInvoiceSchema = z.object({
   totalAmount: z.string(),
   amountPaid: z.string(),
   balanceDue: z.string(),
-  dueAt: z.date().nullable(),
-  paidAt: z.date().nullable(),
+  dueAt: jsonDateNullable,
+  paidAt: jsonDateNullable,
   paymentProvider: z.string().nullable(),
   paymentLink: z.string().nullable(),
   providerInvoiceId: z.string().nullable(),
   publicToken: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
 });
 
 export const adminCreateInvoiceInputSchema = z.object({
@@ -166,11 +169,11 @@ export const adminSubscriptionSchema = z.object({
   interval: z.string(),
   provider: z.string(),
   providerSubscriptionId: z.string().nullable(),
-  currentPeriodStart: z.date().nullable(),
-  currentPeriodEnd: z.date().nullable(),
+  currentPeriodStart: jsonDateNullable,
+  currentPeriodEnd: jsonDateNullable,
   cancelAtPeriodEnd: z.boolean(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
 });
 
 export const adminUpdateSubscriptionInputSchema = z.object({
@@ -190,7 +193,7 @@ export const adminSubscriptionEventSchema = z.object({
   toStatus: z.string(),
   source: z.string(),
   note: z.string().nullable(),
-  createdAt: z.date(),
+  createdAt: jsonDate,
 });
 
 export const publicQuoteSchema = z.object({
@@ -204,8 +207,8 @@ export const publicQuoteSchema = z.object({
   taxAmount: z.string(),
   totalAmount: z.string(),
   clientName: z.string(),
-  expiresAt: z.date().nullable(),
-  approvedAt: z.date().nullable(),
+  expiresAt: jsonDateNullable,
+  approvedAt: jsonDateNullable,
 });
 
 export const adminQuoteConversionResultSchema = z.object({
