@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
+import { Footer } from "@/components/Footer";
 import { api } from "@shared/routes";
 import { ScopeRichText } from "@/components/ScopeRichText";
 import { Button } from "@/components/ui/button";
@@ -58,17 +59,20 @@ export default function QuoteApproval() {
 
   if (!match) {
     return (
-      <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-sm text-muted-foreground">Quote route not found.</p>
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="px-6 py-10 md:px-12">
+          <div className="mx-auto max-w-3xl">
+            <p className="text-sm text-muted-foreground">Quote route not found.</p>
+          </div>
         </div>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
-      <main className="mx-auto max-w-3xl space-y-6">
+    <div className="min-h-screen bg-background text-foreground">
+      <main className="mx-auto max-w-3xl space-y-6 px-6 py-10 md:px-12">
         <Card className="border-border/50 bg-card/90">
           <CardHeader>
             <CardTitle className="font-display text-4xl text-primary">Review Your Quote</CardTitle>
@@ -130,6 +134,7 @@ export default function QuoteApproval() {
           </CardContent>
         </Card>
       </main>
+      <Footer />
     </div>
   );
 }
