@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ScopeRichText } from "@/components/ScopeRichText";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -259,18 +260,35 @@ export default function AdminPortal() {
       return "";
     }
 
+    const baseScope = (project.description || project.name).trim();
+
     if (project.billingModel === "retainer" || project.billingModel === "hybrid") {
       const estimatedMonths = getProjectEstimatedMonths(project);
-      const buildCopy = project.oneOffAmount ? ` Setup/build amount: ${project.currency} ${project.oneOffAmount}.` : "";
-      if (project.billingModel === "hybrid") {
-        return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month until cancelled.`.trim();
+      const billingLines: string[] = [];
+
+      if (project.oneOffAmount) {
+        billingLines.push(`- Setup/build amount: ${project.currency} ${project.oneOffAmount}`);
       }
 
-      const durationCopy = estimatedMonths ? ` Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}.` : "";
-      return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month.${durationCopy}`.trim();
+      if (project.billingModel === "hybrid") {
+        billingLines.push(
+          `- Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month until cancelled`,
+        );
+      } else {
+        billingLines.push(
+          `- Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month`,
+        );
+        if (estimatedMonths) {
+          billingLines.push(
+            `- Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}`,
+          );
+        }
+      }
+
+      return [baseScope, "## Relief Works Billing Context", billingLines.join("\n")].join("\n\n");
     }
 
-    return project.description || project.name;
+    return baseScope;
   }
 
   function getQuoteApprovalHref(quote: AdminQuote) {
@@ -1447,11 +1465,27 @@ export default function AdminPortal() {
                     />
                   )}
                 </div>
-                <Textarea
-                  placeholder="Project scope and delivery framing"
-                  value={projectForm.description}
-                  onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-                />
+                <div className="space-y-3">
+                  <Textarea
+                    className="min-h-[220px]"
+                    placeholder="Paste a ChatGPT scope with headings, bullets, and delivery framing"
+                    value={projectForm.description}
+                    onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
+                  />
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Paste scope text directly from ChatGPT. Relief Works will preserve headings, numbered steps, and bullet points in the workflow preview and quote scope.
+                  </p>
+                  <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope Preview</p>
+                    {projectForm.description.trim() ? (
+                      <ScopeRichText content={projectForm.description} className="mt-3" />
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Paste a project scope and the branded preview will appear here.
+                      </p>
+                    )}
+                  </div>
+                </div>
                 <Button
                   type="submit"
                   disabled={createProjectMutation.isPending || !clientsQuery.data?.length}
@@ -1512,9 +1546,9 @@ export default function AdminPortal() {
                       </div>
                     )}
                     {project.description && (
-                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                        {project.description}
-                      </p>
+                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <ScopeRichText content={project.description} />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1596,23 +1630,28 @@ export default function AdminPortal() {
                 <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
                   <p className="text-sm font-medium text-foreground">Quote source</p>
                   {selectedProject ? (
-                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                      <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
-                      <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
-                      <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
-                      {selectedProject.billingModel === "retainer" && (
-                        <p>
-                          <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
-                        </p>
-                      )}
-                      {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
-                        <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
-                      )}
-                      {selectedProject.billingModel === "hybrid" && (
-                        <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
-                      )}
-                      <p><span className="text-foreground">Scope:</span> {getProjectQuoteScope(selectedProject)}</p>
-                    </div>
+                    <>
+                      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                        <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
+                        <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
+                        <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
+                        {selectedProject.billingModel === "retainer" && (
+                          <p>
+                            <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
+                          </p>
+                        )}
+                        {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
+                          <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
+                        )}
+                        {selectedProject.billingModel === "hybrid" && (
+                          <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
+                        )}
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
+                        <ScopeRichText content={getProjectQuoteScope(selectedProject)} className="mt-3" />
+                      </div>
+                    </>
                   ) : (
                     <p className="mt-2 text-sm text-muted-foreground">
                       Pick a project and the quote will pull through the client, scope, currency, and pricing automatically.
@@ -1695,9 +1734,10 @@ export default function AdminPortal() {
                       </div>
                     </div>
                     {quote.scope && (
-                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                        {quote.scope}
-                      </p>
+                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
+                        <ScopeRichText content={quote.scope} className="mt-3" />
+                      </div>
                     )}
                     <div className="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                       {quote.expiresAt && <span>Expires {new Date(quote.expiresAt).toLocaleDateString()}</span>}
