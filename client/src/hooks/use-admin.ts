@@ -10,13 +10,13 @@ import {
   type AdminQuote,
   type AdminSubscription,
   type AdminCreateQuoteInput,
+  type AdminCreateProjectInput,
   type AdminCreateInvoiceInput,
   type AdminSubscriptionEvent,
   type AdminUpdateSubscriptionInput,
   type AdminInvoice,
   type AdminSession,
   type InsertClient,
-  type InsertProject,
   type InsertSubscription,
 } from "@shared/routes";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -158,7 +158,7 @@ export function useCreateAdminClient() {
 
 export function useCreateAdminProject() {
   return useMutation({
-    mutationFn: async (input: InsertProject) => {
+    mutationFn: async (input: AdminCreateProjectInput) => {
       const validated = api.admin.projects.create.input.parse(input);
       const res = await apiRequest(api.admin.projects.create.method, api.admin.projects.create.path, validated);
       return parseResponse(res, api.admin.projects.create.responses[201]);

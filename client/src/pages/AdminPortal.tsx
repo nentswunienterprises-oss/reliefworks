@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import type { AdminProject } from "@shared/routes";
 import {
   useAdminClients,
   useAdminDashboardSummary,
@@ -42,8 +43,6 @@ import {
   billingModelOptions,
   type ClientStatus,
   clientStatusOptions,
-  type ProjectStatus,
-  projectStatusOptions,
   type SubscriptionInterval,
   subscriptionIntervalOptions,
   type SubscriptionStatus,
@@ -78,6 +77,10 @@ const metricMeta = [
 function formatLabel(value: string) {
   return value.replace(/_/g, " ");
 }
+
+const projectCommercialOptions = billingModelOptions.filter(
+  (option): option is Exclude<BillingModel, "hybrid"> => option !== "hybrid",
+);
 
 export default function AdminPortal() {
   const { toast } = useToast();
@@ -114,20 +117,20 @@ export default function AdminPortal() {
     clientId: string;
     name: string;
     description: string;
-    status: ProjectStatus;
-    billingModel: BillingModel;
+    billingModel: Exclude<BillingModel, "hybrid">;
     currency: SupportedCurrency;
     oneOffAmount: string;
     monthlyRetainerAmount: string;
+    estimatedRetainerMonths: string;
   }>({
     clientId: "",
     name: "",
     description: "",
-    status: "lead",
-    billingModel: "hybrid",
+    billingModel: "one_off",
     currency: "ZAR",
     oneOffAmount: "",
     monthlyRetainerAmount: "",
+    estimatedRetainerMonths: "6",
   });
   const [quoteForm, setQuoteForm] = useState<{
     clientId: string;
@@ -206,6 +209,50 @@ export default function AdminPortal() {
   const selectedProject = projects.find((project) => String(project.id) === workspaceProjectId) ?? null;
   const selectedQuote = quotes.find((quote) => String(quote.id) === workspaceQuoteId) ?? null;
 
+  function getProjectEstimatedMonths(project: AdminProject | null) {
+    return project?.estimatedRetainerMonths ?? null;
+  }
+
+  function getProjectQuoteSubtotal(project: AdminProject | null) {
+    if (!project) {
+      return "";
+    }
+
+    if (project.billingModel === "retainer") {
+      const monthlyAmount = Number(project.monthlyRetainerAmount || "0");
+      const estimatedMonths = Number(project.estimatedRetainerMonths || 1);
+      return (monthlyAmount * estimatedMonths).toFixed(2);
+    }
+
+    return project.oneOffAmount || "";
+  }
+
+  function getProjectQuoteTitle(project: AdminProject | null) {
+    if (!project) {
+      return "";
+    }
+
+    if (project.billingModel === "retainer") {
+      return `${project.name} Retainer`;
+    }
+
+    return project.name;
+  }
+
+  function getProjectQuoteScope(project: AdminProject | null) {
+    if (!project) {
+      return "";
+    }
+
+    if (project.billingModel === "retainer") {
+      const estimatedMonths = getProjectEstimatedMonths(project);
+      const durationCopy = estimatedMonths ? ` Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}.` : "";
+      return `${project.description || project.name} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month.${durationCopy}`.trim();
+    }
+
+    return project.description || project.name;
+  }
+
   const workspaceProjects = workspaceClientId
     ? projects.filter((project) => String(project.clientId) === workspaceClientId)
     : projects;
@@ -278,7 +325,7 @@ export default function AdminPortal() {
     if (!projectId) {
       setWorkspaceProjectId("");
       setWorkspaceQuoteId("");
-      setQuoteForm((current) => ({ ...current, projectId: "" }));
+      setQuoteForm((current) => ({ ...current, projectId: "", title: "", scope: "", subtotal: "" }));
       setInvoiceForm((current) => ({ ...current, projectId: "", quoteId: "" }));
       setSubscriptionForm((current) => ({ ...current, projectId: "" }));
       return;
@@ -299,10 +346,10 @@ export default function AdminPortal() {
       ...current,
       clientId,
       projectId,
-      title: current.title || project.name,
-      scope: current.scope || project.description || "",
+      title: getProjectQuoteTitle(project),
+      scope: getProjectQuoteScope(project),
       currency: current.currency === "ZAR" ? project.currency : current.currency,
-      subtotal: current.subtotal || project.oneOffAmount || "",
+      subtotal: getProjectQuoteSubtotal(project),
     }));
     setInvoiceForm((current) => ({
       ...current,
@@ -310,7 +357,7 @@ export default function AdminPortal() {
       projectId,
       quoteId: "",
       currency: current.currency === "ZAR" ? project.currency : current.currency,
-      subtotal: current.subtotal || project.oneOffAmount || "",
+      subtotal: getProjectQuoteSubtotal(project),
     }));
     setSubscriptionForm((current) => ({
       ...current,
@@ -421,6 +468,32 @@ export default function AdminPortal() {
     }
   }
 
+  async function handleCreateClientFromInquiry(inquiry: NonNullable<typeof dashboardQuery.data>["recentInquiries"][number]) {
+    try {
+      const client = await createClientMutation.mutateAsync({
+        name: inquiry.name,
+        primaryContactName: inquiry.name,
+        primaryContactEmail: inquiry.email,
+        primaryContactPhone: null,
+        companyName: inquiry.company || null,
+        status: "lead",
+        notes: [inquiry.role ? `Role: ${inquiry.role}` : null, inquiry.message].filter(Boolean).join("\n\n"),
+      });
+
+      applyClientWorkspace(String(client.id));
+      toast({
+        title: "Client created from inquiry",
+        description: `${client.name} is now active in the workflow and ready for project setup.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Inquiry conversion failed",
+        description: error instanceof Error ? error.message : "Unable to create client from inquiry.",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -429,13 +502,17 @@ export default function AdminPortal() {
         clientId: Number(projectForm.clientId),
         name: projectForm.name,
         description: projectForm.description || null,
-        status: projectForm.status,
         billingModel: projectForm.billingModel,
         currency: projectForm.currency,
-        oneOffAmount: projectForm.oneOffAmount || null,
-        monthlyRetainerAmount: projectForm.monthlyRetainerAmount || null,
-        startDate: null,
-        endDate: null,
+        oneOffAmount: projectForm.billingModel === "one_off" && projectForm.oneOffAmount
+          ? Number(projectForm.oneOffAmount)
+          : null,
+        monthlyRetainerAmount: projectForm.billingModel === "retainer" && projectForm.monthlyRetainerAmount
+          ? Number(projectForm.monthlyRetainerAmount)
+          : null,
+        estimatedRetainerMonths: projectForm.billingModel === "retainer"
+          ? (projectForm.estimatedRetainerMonths ? Number(projectForm.estimatedRetainerMonths) : null)
+          : null,
       });
       applyProjectWorkspace(String(project.id));
 
@@ -443,11 +520,11 @@ export default function AdminPortal() {
         clientId: String(project.clientId),
         name: "",
         description: "",
-        status: "lead",
-        billingModel: project.billingModel,
+        billingModel: project.billingModel === "retainer" ? "retainer" : "one_off",
         currency: project.currency,
         oneOffAmount: "",
         monthlyRetainerAmount: "",
+        estimatedRetainerMonths: project.estimatedRetainerMonths ? String(project.estimatedRetainerMonths) : "6",
       });
 
       toast({
@@ -467,13 +544,18 @@ export default function AdminPortal() {
     event.preventDefault();
 
     try {
+      const project = projects.find((item) => String(item.id) === quoteForm.projectId);
+      if (!project) {
+        throw new Error("Select a project before creating a quote.");
+      }
+
       const quote = await createQuoteMutation.mutateAsync({
-        clientId: Number(quoteForm.clientId),
-        projectId: quoteForm.projectId ? Number(quoteForm.projectId) : null,
-        title: quoteForm.title,
-        scope: quoteForm.scope || null,
-        currency: quoteForm.currency,
-        subtotal: Number(quoteForm.subtotal || "0"),
+        clientId: project.clientId,
+        projectId: project.id,
+        title: getProjectQuoteTitle(project),
+        scope: getProjectQuoteScope(project),
+        currency: project.currency,
+        subtotal: Number(getProjectQuoteSubtotal(project) || "0"),
         taxAmount: Number(quoteForm.taxAmount || "0"),
         expiresAt: quoteForm.expiresAt ? new Date(quoteForm.expiresAt) : null,
       });
@@ -855,6 +937,17 @@ export default function AdminPortal() {
                   <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
                     {inquiry.message}
                   </p>
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={createClientMutation.isPending}
+                      onClick={() => handleCreateClientFromInquiry(inquiry)}
+                    >
+                      Create Client From Inquiry
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -1159,7 +1252,7 @@ export default function AdminPortal() {
                     Projects
                   </CardTitle>
                   <CardDescription>
-                    Create active delivery records with billing structure and status.
+                    Create the delivery record once. Lifecycle status will be inferred automatically from quotes and invoices.
                   </CardDescription>
                   <p className="mt-3 text-sm text-muted-foreground">
                     {selectedClient
@@ -1192,24 +1285,12 @@ export default function AdminPortal() {
                     value={projectForm.name}
                     onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
                   />
-                  <Select value={projectForm.status} onValueChange={(value) => setProjectForm((current) => ({ ...current, status: value as ProjectStatus }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Project status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projectStatusOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {formatLabel(option)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as BillingModel }))}>
+                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as Exclude<BillingModel, "hybrid"> }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Billing model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {billingModelOptions.map((option) => (
+                      {projectCommercialOptions.map((option) => (
                         <SelectItem key={option} value={option}>
                           {formatLabel(option)}
                         </SelectItem>
@@ -1229,18 +1310,25 @@ export default function AdminPortal() {
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="One-off amount"
+                    placeholder={projectForm.billingModel === "retainer" ? "Setup amount (optional)" : "Build amount"}
                     value={projectForm.oneOffAmount}
                     onChange={(event) => setProjectForm((current) => ({ ...current, oneOffAmount: event.target.value }))}
                   />
                   <Input
-                    placeholder="Monthly retainer"
+                    placeholder="Monthly maintenance amount"
                     value={projectForm.monthlyRetainerAmount}
                     onChange={(event) => setProjectForm((current) => ({ ...current, monthlyRetainerAmount: event.target.value }))}
                   />
+                  {projectForm.billingModel === "retainer" && (
+                    <Input
+                      placeholder="Estimated months"
+                      value={projectForm.estimatedRetainerMonths}
+                      onChange={(event) => setProjectForm((current) => ({ ...current, estimatedRetainerMonths: event.target.value }))}
+                    />
+                  )}
                 </div>
                 <Textarea
-                  placeholder="Project scope, delivery notes, or maintenance framing"
+                  placeholder="Project scope and delivery framing"
                   value={projectForm.description}
                   onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
                 />
@@ -1272,7 +1360,7 @@ export default function AdminPortal() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-lg font-medium text-foreground">{project.name}</h3>
-                          <Badge variant="outline">{project.status}</Badge>
+                          <Badge variant="outline">{project.lifecycleStatus}</Badge>
                           <Badge variant="secondary">{formatLabel(project.billingModel)}</Badge>
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">{project.clientName}</p>
@@ -1298,6 +1386,7 @@ export default function AdminPortal() {
                       <div className="mt-3 flex flex-wrap gap-2 text-sm text-muted-foreground">
                         {project.oneOffAmount && <span>Build: {project.oneOffAmount}</span>}
                         {project.monthlyRetainerAmount && <span>Maintenance: {project.monthlyRetainerAmount}</span>}
+                        {project.estimatedRetainerMonths && <span>Estimated months: {project.estimatedRetainerMonths}</span>}
                       </div>
                     )}
                     {project.description && (
@@ -1345,7 +1434,7 @@ export default function AdminPortal() {
                     Quotations
                   </CardTitle>
                   <CardDescription>
-                    Build formal quotes with totals and expiry so clients can move into approval and billing.
+                    Create a quote from the linked project. Scope, pricing, and client context are inherited automatically.
                   </CardDescription>
                   <p className="mt-3 text-sm text-muted-foreground">
                     {selectedProject
@@ -1362,26 +1451,13 @@ export default function AdminPortal() {
             </CardHeader>
             <CardContent className="space-y-6">
               <form className="grid gap-4" onSubmit={handleCreateQuote}>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <Select value={quoteForm.clientId} onValueChange={(value) => applyClientWorkspace(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={String(client.id)}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
+                <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
                   <Select value={quoteForm.projectId || "none"} onValueChange={(value) => applyProjectWorkspace(value === "none" ? "" : value)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Optional project" />
+                      <SelectValue placeholder="Select project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No linked project</SelectItem>
+                      <SelectItem value="none">Select project</SelectItem>
                       {quoteProjects.map((project) => (
                         <SelectItem key={project.id} value={String(project.id)}>
                           {project.name}
@@ -1389,37 +1465,39 @@ export default function AdminPortal() {
                       ))}
                     </SelectContent>
                   </Select>
-
-                  <Input
-                    placeholder="Quote title"
-                    value={quoteForm.title}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, title: event.target.value }))}
-                  />
                 </div>
 
-                <Textarea
-                  placeholder="Scope and deliverables summary"
-                  value={quoteForm.scope}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, scope: event.target.value }))}
-                />
+                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
+                  <p className="text-sm font-medium text-foreground">Quote source</p>
+                  {selectedProject ? (
+                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                      <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
+                      <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
+                      <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
+                      {selectedProject.billingModel === "retainer" && (
+                        <p>
+                          <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
+                        </p>
+                      )}
+                      <p><span className="text-foreground">Scope:</span> {getProjectQuoteScope(selectedProject)}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Pick a project and the quote will pull through the client, scope, currency, and pricing automatically.
+                    </p>
+                  )}
+                </div>
 
-                <div className="grid gap-4 md:grid-cols-4">
-                  <Select value={quoteForm.currency} onValueChange={(value) => setQuoteForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supportedCurrencyOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Input
+                    placeholder="Currency"
+                    value={selectedProject?.currency || quoteForm.currency}
+                    disabled
+                  />
                   <Input
                     placeholder="Subtotal"
-                    value={quoteForm.subtotal}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, subtotal: event.target.value }))}
+                    value={selectedProject ? getProjectQuoteSubtotal(selectedProject) : quoteForm.subtotal}
+                    disabled
                   />
                   <Input
                     placeholder="Tax"
@@ -1436,7 +1514,7 @@ export default function AdminPortal() {
 
                 <Button
                   type="submit"
-                  disabled={createQuoteMutation.isPending || !clientsQuery.data?.length}
+                  disabled={createQuoteMutation.isPending || !quoteForm.projectId}
                 >
                   {createQuoteMutation.isPending ? "Creating quote..." : "Create Quote"}
                 </Button>

@@ -3,10 +3,10 @@ import {
   billingModelSchema,
   clientStatusSchema,
   invoiceStatusSchema,
+  projectLifecycleStatusSchema,
   insertClientSchema,
   insertInvoiceSchema,
   insertInquirySchema,
-  insertProjectSchema,
   insertQuoteSchema,
   insertSubscriptionSchema,
   inquiries,
@@ -28,10 +28,48 @@ const jsonPressureType = z.preprocess(
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type InsertClient = z.infer<typeof insertClientSchema>;
-export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+export const adminCreateProjectInputSchema = z.object({
+  clientId: z.number(),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  billingModel: billingModelSchema.refine((value) => value !== "hybrid", {
+    message: "Choose either once-off or retainer billing.",
+  }),
+  currency: supportedCurrencySchema.default("ZAR"),
+  oneOffAmount: z.number().min(0).nullable().optional(),
+  monthlyRetainerAmount: z.number().min(0).nullable().optional(),
+  estimatedRetainerMonths: z.number().int().min(1).max(60).nullable().optional(),
+}).superRefine((input, ctx) => {
+  if (input.billingModel === "one_off" && input.oneOffAmount == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Once-off projects need a build amount.",
+      path: ["oneOffAmount"],
+    });
+  }
+
+  if (input.billingModel === "retainer") {
+    if (input.monthlyRetainerAmount == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Retainer projects need a monthly maintenance amount.",
+        path: ["monthlyRetainerAmount"],
+      });
+    }
+
+    if (input.estimatedRetainerMonths == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Retainer projects need estimated months.",
+        path: ["estimatedRetainerMonths"],
+      });
+    }
+  }
+});
 
 export const adminSessionSchema = z.object({
   isAuthenticated: z.boolean(),
@@ -91,10 +129,12 @@ export const adminProjectSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   status: projectStatusSchema,
+  lifecycleStatus: projectLifecycleStatusSchema,
   billingModel: billingModelSchema,
   currency: supportedCurrencySchema,
   oneOffAmount: z.string().nullable(),
   monthlyRetainerAmount: z.string().nullable(),
+  estimatedRetainerMonths: z.number().int().nullable(),
   startDate: jsonDateNullable,
   endDate: jsonDateNullable,
   createdAt: jsonDate,
@@ -123,14 +163,38 @@ export const adminQuoteSchema = z.object({
 });
 
 export const adminCreateQuoteInputSchema = z.object({
-  clientId: z.number(),
+  clientId: z.number().optional(),
   projectId: z.number().nullable().optional(),
-  title: z.string().min(1),
+  title: z.string().min(1).optional(),
   scope: z.string().nullable().optional(),
-  currency: supportedCurrencySchema.default('ZAR'),
-  subtotal: z.number().min(0),
+  currency: supportedCurrencySchema.optional().default('ZAR'),
+  subtotal: z.number().min(0).optional(),
   taxAmount: z.number().min(0).default(0),
   expiresAt: z.coerce.date().nullable().optional(),
+}).superRefine((input, ctx) => {
+  if (!input.projectId && input.clientId == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A quote needs either a project or a client.",
+      path: ["projectId"],
+    });
+  }
+
+  if (!input.projectId && !input.title) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A standalone quote needs a title.",
+      path: ["title"],
+    });
+  }
+
+  if (!input.projectId && input.subtotal == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A standalone quote needs a subtotal.",
+      path: ["subtotal"],
+    });
+  }
 });
 
 export const adminInvoiceSchema = z.object({
@@ -235,6 +299,7 @@ export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
 export type AdminDashboardSummary = z.infer<typeof adminDashboardSummarySchema>;
 export type AdminClient = z.infer<typeof adminClientSchema>;
 export type AdminProject = z.infer<typeof adminProjectSchema>;
+export type AdminCreateProjectInput = z.infer<typeof adminCreateProjectInputSchema>;
 export type AdminQuote = z.infer<typeof adminQuoteSchema>;
 export type AdminCreateQuoteInput = z.infer<typeof adminCreateQuoteInputSchema>;
 export type AdminInvoice = z.infer<typeof adminInvoiceSchema>;
@@ -320,7 +385,7 @@ export const api = {
       create: {
         method: 'POST' as const,
         path: '/api/admin/projects',
-        input: insertProjectSchema,
+        input: adminCreateProjectInputSchema,
         responses: {
           201: adminProjectSchema,
           400: errorSchemas.validation,

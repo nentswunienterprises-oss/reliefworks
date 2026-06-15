@@ -35,6 +35,12 @@ function generatePublicToken() {
   return randomUUID().replace(/-/g, "");
 }
 
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
 function getAdminCredentials() {
   return {
     email: process.env.ADMIN_EMAIL || "admin@reliefworks.local",
@@ -412,7 +418,26 @@ export function registerRoutes(app: Express) {
   app.post(api.admin.projects.create.path, requireAdmin, async (req, res) => {
     try {
       const input = api.admin.projects.create.input.parse(req.body);
-      const project = await storage.createProject(input);
+      const isRetainer = input.billingModel === "retainer";
+      const startDate = isRetainer && input.estimatedRetainerMonths ? new Date() : null;
+      const endDate = startDate && input.estimatedRetainerMonths
+        ? addMonths(startDate, input.estimatedRetainerMonths)
+        : null;
+
+      const project = await storage.createProject({
+        clientId: input.clientId,
+        name: input.name,
+        description: input.description ?? null,
+        status: "lead",
+        billingModel: input.billingModel,
+        currency: input.currency,
+        oneOffAmount: input.billingModel === "one_off" ? input.oneOffAmount?.toFixed(2) ?? null : null,
+        monthlyRetainerAmount: input.billingModel === "retainer"
+          ? input.monthlyRetainerAmount?.toFixed(2) ?? null
+          : null,
+        startDate,
+        endDate,
+      });
       res.status(201).json(project);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -433,18 +458,41 @@ export function registerRoutes(app: Express) {
   app.post(api.admin.quotes.create.path, requireAdmin, async (req, res) => {
     try {
       const input = api.admin.quotes.create.input.parse(req.body);
-      const subtotal = Number(input.subtotal.toFixed(2));
+      const project = input.projectId ? await storage.getProjectById(input.projectId) : null;
+      const resolvedClientId = project?.clientId ?? input.clientId;
+      const resolvedTitle = input.title ?? project?.name;
+      const resolvedScope = input.scope ?? project?.description ?? null;
+      const resolvedCurrency = project?.currency ?? input.currency;
+      const derivedSubtotal = project
+        ? project.billingModel === "retainer"
+          ? Number(project.monthlyRetainerAmount || "0") * Number(project.estimatedRetainerMonths || 1)
+          : Number(project.oneOffAmount || "0")
+        : input.subtotal;
+
+      if (!resolvedClientId) {
+        return res.status(400).json({ message: "Quote needs a client or linked project", field: "clientId" });
+      }
+
+      if (!resolvedTitle) {
+        return res.status(400).json({ message: "Quote needs a title or linked project", field: "title" });
+      }
+
+      if (derivedSubtotal == null) {
+        return res.status(400).json({ message: "Quote needs a subtotal or linked project pricing", field: "subtotal" });
+      }
+
+      const subtotal = Number(derivedSubtotal.toFixed(2));
       const taxAmount = Number(input.taxAmount.toFixed(2));
       const totalAmount = Number((subtotal + taxAmount).toFixed(2));
 
       const quote = await storage.createQuote({
-        clientId: input.clientId,
-        projectId: input.projectId ?? null,
+        clientId: resolvedClientId,
+        projectId: project?.id ?? input.projectId ?? null,
         quoteNumber: generateQuoteNumber(),
-        title: input.title,
-        scope: input.scope ?? null,
+        title: resolvedTitle,
+        scope: resolvedScope,
         status: "draft",
-        currency: input.currency,
+        currency: resolvedCurrency as SupportedCurrency,
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         totalAmount: totalAmount.toFixed(2),

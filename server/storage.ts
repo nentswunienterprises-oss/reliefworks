@@ -13,6 +13,7 @@ import {
   type InsertQuote,
   type InsertSubscription,
   type PaymentProvider,
+  type ProjectLifecycleStatus,
   projects,
   invoices,
   quotes,
@@ -41,7 +42,10 @@ export interface AdminDashboardSummary {
 }
 
 export interface AdminProjectRecord extends Project {
+  clientId: number;
   clientName: string;
+  lifecycleStatus: ProjectLifecycleStatus;
+  estimatedRetainerMonths: number | null;
 }
 
 export interface AdminQuoteRecord {
@@ -129,6 +133,7 @@ export interface IStorage {
   listClients(): Promise<Client[]>;
   createClient(client: InsertClient): Promise<Client>;
   listProjects(): Promise<AdminProjectRecord[]>;
+  getProjectById(projectId: number): Promise<AdminProjectRecord | null>;
   createProject(project: InsertProject): Promise<AdminProjectRecord>;
   listQuotes(): Promise<AdminQuoteRecord[]>;
   getQuoteById(quoteId: number): Promise<AdminQuoteRecord | null>;
@@ -180,6 +185,27 @@ export interface IStorage {
     note?: string;
   }): Promise<AdminSubscriptionRecord | null>;
 }
+
+const projectLifecycleStatusSql = sql<ProjectLifecycleStatus>`case
+  when exists (select 1 from ${invoices} where ${invoices.projectId} = ${projects.id}) then 'invoiced'
+  when exists (select 1 from ${quotes} where ${quotes.projectId} = ${projects.id} and ${quotes.status} = 'approved') then 'approved'
+  when exists (select 1 from ${quotes} where ${quotes.projectId} = ${projects.id}) then 'quoted'
+  else 'lead'
+end`;
+
+const projectEstimatedMonthsSql = sql<number | null>`case
+  when ${projects.billingModel} = 'retainer'
+    and ${projects.startDate} is not null
+    and ${projects.endDate} is not null
+  then greatest(
+    1,
+    (
+      date_part('year', age(${projects.endDate}, ${projects.startDate})) * 12
+      + date_part('month', age(${projects.endDate}, ${projects.startDate}))
+    )::int
+  )
+  else null
+end`;
 
 export class DatabaseStorage implements IStorage {
   async createInquiry(insertInquiry: InsertInquiry): Promise<Inquiry> {
@@ -237,10 +263,12 @@ export class DatabaseStorage implements IStorage {
         name: projects.name,
         description: projects.description,
         status: projects.status,
+        lifecycleStatus: projectLifecycleStatusSql,
         billingModel: projects.billingModel,
         currency: projects.currency,
         oneOffAmount: projects.oneOffAmount,
         monthlyRetainerAmount: projects.monthlyRetainerAmount,
+        estimatedRetainerMonths: projectEstimatedMonthsSql,
         startDate: projects.startDate,
         endDate: projects.endDate,
         createdAt: projects.createdAt,
@@ -253,8 +281,7 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async createProject(insertProject: InsertProject): Promise<AdminProjectRecord> {
-    const [project] = await db.insert(projects).values(insertProject).returning();
+  async getProjectById(projectId: number): Promise<AdminProjectRecord | null> {
     const rows = await db
       .select({
         id: projects.id,
@@ -263,10 +290,12 @@ export class DatabaseStorage implements IStorage {
         name: projects.name,
         description: projects.description,
         status: projects.status,
+        lifecycleStatus: projectLifecycleStatusSql,
         billingModel: projects.billingModel,
         currency: projects.currency,
         oneOffAmount: projects.oneOffAmount,
         monthlyRetainerAmount: projects.monthlyRetainerAmount,
+        estimatedRetainerMonths: projectEstimatedMonthsSql,
         startDate: projects.startDate,
         endDate: projects.endDate,
         createdAt: projects.createdAt,
@@ -274,9 +303,19 @@ export class DatabaseStorage implements IStorage {
       })
       .from(projects)
       .innerJoin(clients, eq(projects.clientId, clients.id))
-      .where(eq(projects.id, project.id));
+      .where(eq(projects.id, projectId))
+      .limit(1);
 
-    return rows[0];
+    return rows[0] ?? null;
+  }
+
+  async createProject(insertProject: InsertProject): Promise<AdminProjectRecord> {
+    const [project] = await db.insert(projects).values(insertProject).returning();
+    const created = await this.getProjectById(project.id);
+    if (!created) {
+      throw new Error("Project could not be loaded after creation");
+    }
+    return created;
   }
 
   async listQuotes(): Promise<AdminQuoteRecord[]> {
