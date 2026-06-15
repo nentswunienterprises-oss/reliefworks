@@ -24,6 +24,16 @@ type VerifyPayfastSignatureInput = {
   passphrase?: string;
 };
 
+function sanitizePayfastValue(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  // Deployment env values occasionally arrive with trailing CRLF/whitespace,
+  // which breaks the submitted query params and PayFast signature.
+  return value.replace(/[\r\n]+$/g, "").trimEnd();
+}
+
 function encodeValue(value: string): string {
   return encodeURIComponent(value).replace(/%20/g, "+");
 }
@@ -32,11 +42,12 @@ function buildSignature(baseParams: Record<string, string>, passphrase?: string)
   const query = Object.entries(baseParams)
     .filter(([, value]) => value !== "")
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${encodeValue(value)}`)
+    .map(([key, value]) => `${key}=${encodeValue(sanitizePayfastValue(value))}`)
     .join("&");
 
-  const signatureSeed = passphrase
-    ? `${query}&passphrase=${encodeValue(passphrase)}`
+  const sanitizedPassphrase = sanitizePayfastValue(passphrase);
+  const signatureSeed = sanitizedPassphrase
+    ? `${query}&passphrase=${encodeValue(sanitizedPassphrase)}`
     : query;
 
   return createHash("md5").update(signatureSeed).digest("hex");
@@ -53,7 +64,7 @@ export function verifyPayfastSignature(input: VerifyPayfastSignatureInput): bool
     .filter(([key]) => key !== "signature")
     .reduce<Record<string, string>>((acc, [key, value]) => {
       if (typeof value === "string") {
-        acc[key] = value;
+        acc[key] = sanitizePayfastValue(value);
       }
 
       return acc;
@@ -102,24 +113,32 @@ export function createPayfastPaymentUrl(
   config: PayfastConfig,
   input: CreatePayfastPaymentUrlInput,
 ): { paymentLink: string; reference: string } {
+  const sanitizedConfig = {
+    merchantId: sanitizePayfastValue(config.merchantId),
+    merchantKey: sanitizePayfastValue(config.merchantKey),
+    passphrase: sanitizePayfastValue(config.passphrase),
+    returnUrl: sanitizePayfastValue(config.returnUrl),
+    cancelUrl: sanitizePayfastValue(config.cancelUrl),
+    notifyUrl: sanitizePayfastValue(config.notifyUrl),
+  };
   const baseUrl = config.sandbox
     ? "https://sandbox.payfast.co.za"
     : "https://www.payfast.co.za";
 
   const params: Record<string, string> = {
-    merchant_id: config.merchantId,
-    merchant_key: config.merchantKey,
-    return_url: config.returnUrl || "",
-    cancel_url: config.cancelUrl || "",
-    notify_url: config.notifyUrl || "",
-    m_payment_id: input.invoiceToken,
-    amount: input.amount,
-    item_name: input.itemName,
-    item_description: input.itemDescription || "",
-    email_address: input.customerEmail,
+    merchant_id: sanitizedConfig.merchantId,
+    merchant_key: sanitizedConfig.merchantKey,
+    return_url: sanitizedConfig.returnUrl,
+    cancel_url: sanitizedConfig.cancelUrl,
+    notify_url: sanitizedConfig.notifyUrl,
+    m_payment_id: sanitizePayfastValue(input.invoiceToken),
+    amount: sanitizePayfastValue(input.amount),
+    item_name: sanitizePayfastValue(input.itemName),
+    item_description: sanitizePayfastValue(input.itemDescription),
+    email_address: sanitizePayfastValue(input.customerEmail),
   };
 
-  const signature = buildSignature(params, config.passphrase);
+  const signature = buildSignature(params, sanitizedConfig.passphrase);
   const query = Object.entries(params)
     .filter(([, value]) => value !== "")
     .sort(([a], [b]) => a.localeCompare(b))
