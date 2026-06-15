@@ -1,8 +1,10 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist/public",
-  "framework": "vite",
-  "env": {
-    "VITE_SUPABASE_URL": "https://pzqhneluoquohtskfwkr.supabase.co"
-  }
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/services", "destination": "/index.html" },
+    { "source": "/diagnosis", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/quote/:path*", "destination": "/index.html" }
+  ]
 }

@@ -1,14 +1,14 @@
 import type { Express } from "express";
 import type { RequestHandler } from "express";
-import type { Server } from "http";
 import { randomUUID } from "crypto";
 import {
   createPayfastPaymentUrl,
   isTrustedPayfastSource,
   verifyPayfastSignature,
-} from "./payfast";
-import { sendTransactionalEmail } from "./email";
-import { storage } from "./storage";
+} from "./payfast.ts";
+import { clearAdminAuthCookie, setAdminAuthCookie } from "./admin-auth.ts";
+import { sendTransactionalEmail } from "./email.ts";
+import { storage } from "./storage.ts";
 import { api } from "@shared/routes";
 import { z } from "zod";
 
@@ -43,7 +43,7 @@ function getAdminCredentials() {
 }
 
 const requireAdmin: RequestHandler = (req, res, next) => {
-  if (!req.session.adminUser) {
+  if (!req.adminUser) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
@@ -82,10 +82,7 @@ function normalizeSubscriptionStatus(input: string | undefined) {
   return "pending";
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export function registerRoutes(app: Express) {
   const sendEmailSafely = async (input: {
     to: string;
     subject: string;
@@ -347,8 +344,8 @@ export async function registerRoutes(
 
   app.get(api.admin.session.path, (req, res) => {
     res.json({
-      isAuthenticated: Boolean(req.session.adminUser),
-      user: req.session.adminUser ?? null,
+      isAuthenticated: Boolean(req.adminUser),
+      user: req.adminUser ?? null,
     });
   });
 
@@ -363,26 +360,21 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    req.session.adminUser = {
+    const adminUser = {
       email: adminCredentials.email,
       name: adminCredentials.name,
     };
+    setAdminAuthCookie(res, adminUser);
 
     res.json({
       isAuthenticated: true,
-      user: req.session.adminUser,
+      user: adminUser,
     });
   });
 
-  app.post(api.admin.logout.path, requireAdmin, (req, res, next) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return next(err);
-      }
-
-      res.clearCookie("reliefworks.sid");
-      res.json({ success: true });
-    });
+  app.post(api.admin.logout.path, (_req, res) => {
+    clearAdminAuthCookie(res);
+    res.json({ success: true });
   });
 
   app.get(api.admin.dashboardSummary.path, requireAdmin, async (_req, res) => {
@@ -730,6 +722,4 @@ export async function registerRoutes(
       throw error;
     }
   });
-
-  return httpServer;
 }

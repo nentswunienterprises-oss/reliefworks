@@ -7,7 +7,7 @@ import {
   insertQuoteSchema,
   insertSubscriptionSchema,
   inquiries,
-} from './schema';
+} from './schema.ts';
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type InsertClient = z.infer<typeof insertClientSchema>;
