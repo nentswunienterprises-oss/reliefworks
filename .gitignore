@@ -1,6 +1,8 @@
 node_modules
 dist
 public
+!api/public
+!api/public/**
 .DS_Store
 server/public
 vite.config.ts.*
