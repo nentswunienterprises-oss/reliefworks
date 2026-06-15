@@ -18,16 +18,16 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const pressureOptions = [
-  { value: "Friction", label: "Friction - Things feel heavy and slow" },
+  { value: "friction", label: "Friction - Things feel heavy and slow" },
   {
-    value: "Limitation",
+    value: "limitation",
     label: "Limitation - Is this idea even possible?",
   },
   {
-    value: "Incoherence",
+    value: "incoherence",
     label: "Incoherence - We don't feel like ourselves",
   },
-  { value: "Other", label: "Other - Something else entirely" },
+  { value: "other", label: "Other - Something else entirely" },
 ] as const;
 
 export function DiagnosisForm() {
@@ -40,7 +40,6 @@ export function DiagnosisForm() {
       email: "",
       company: "",
       role: "",
-      pressureType: "",
       message: "",
     },
   });

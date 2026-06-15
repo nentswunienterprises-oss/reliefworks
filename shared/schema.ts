@@ -11,13 +11,35 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const pressureTypeOptions = ["friction", "limitation", "incoherence", "other"] as const;
+export const clientStatusOptions = ["lead", "active", "paused", "archived"] as const;
+export const projectStatusOptions = ["lead", "quoted", "active", "maintenance", "completed"] as const;
+export const billingModelOptions = ["one_off", "retainer", "hybrid"] as const;
+export const supportedCurrencyOptions = ["ZAR", "USD", "GBP", "EUR"] as const;
+export const quoteStatusOptions = ["draft", "sent", "approved", "expired"] as const;
+export const invoiceStatusOptions = ["draft", "sent", "pending_payment", "paid", "failed", "cancelled"] as const;
+export const subscriptionStatusOptions = ["pending", "active", "paused", "cancelled", "failed"] as const;
+export const subscriptionIntervalOptions = ["month", "year"] as const;
+export const paymentProviderOptions = ["payfast"] as const;
+
+export const pressureTypeSchema = z.enum(pressureTypeOptions);
+export const clientStatusSchema = z.enum(clientStatusOptions);
+export const projectStatusSchema = z.enum(projectStatusOptions);
+export const billingModelSchema = z.enum(billingModelOptions);
+export const supportedCurrencySchema = z.enum(supportedCurrencyOptions);
+export const quoteStatusSchema = z.enum(quoteStatusOptions);
+export const invoiceStatusSchema = z.enum(invoiceStatusOptions);
+export const subscriptionStatusSchema = z.enum(subscriptionStatusOptions);
+export const subscriptionIntervalSchema = z.enum(subscriptionIntervalOptions);
+export const paymentProviderSchema = z.enum(paymentProviderOptions);
+
 export const inquiries = pgTable("inquiries", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull(),
   company: text("company"),
   role: text("role"),
-  pressureType: varchar("pressure_type", { length: 50 }).notNull(), // Friction, Limitation, Incoherence, Other
+  pressureType: varchar("pressure_type", { length: 50 }).notNull(),
   message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -168,18 +190,26 @@ export const subscriptionStatusEvents = pgTable("subscription_status_events", {
 export const insertInquirySchema = createInsertSchema(inquiries).omit({ 
   id: true, 
   createdAt: true 
+}).extend({
+  pressureType: pressureTypeSchema,
 });
 
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  status: clientStatusSchema.optional(),
 });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  status: projectStatusSchema.optional(),
+  billingModel: billingModelSchema.optional(),
+  currency: supportedCurrencySchema.optional(),
 });
 
 export const insertProjectStatusUpdateSchema = createInsertSchema(projectStatusUpdates).omit({
@@ -191,6 +221,9 @@ export const insertQuoteSchema = createInsertSchema(quotes).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  status: quoteStatusSchema.optional(),
+  currency: supportedCurrencySchema.optional(),
 });
 
 export const insertQuoteLineItemSchema = createInsertSchema(quoteLineItems).omit({
@@ -201,6 +234,10 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  status: invoiceStatusSchema.optional(),
+  currency: supportedCurrencySchema.optional(),
+  paymentProvider: paymentProviderSchema.nullable().optional(),
 });
 
 export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({
@@ -211,30 +248,48 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  status: subscriptionStatusSchema.optional(),
+  currency: supportedCurrencySchema.optional(),
+  interval: subscriptionIntervalSchema.optional(),
+  provider: paymentProviderSchema.optional(),
 });
 
 export const insertSubscriptionStatusEventSchema = createInsertSchema(subscriptionStatusEvents).omit({
   id: true,
   createdAt: true,
+}).extend({
+  fromStatus: subscriptionStatusSchema.nullable().optional(),
+  toStatus: subscriptionStatusSchema,
 });
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type Inquiry = typeof inquiries.$inferSelect;
+export type PressureType = z.infer<typeof pressureTypeSchema>;
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = typeof clients.$inferSelect;
+export type ClientStatus = z.infer<typeof clientStatusSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
+export type ProjectStatus = z.infer<typeof projectStatusSchema>;
+export type BillingModel = z.infer<typeof billingModelSchema>;
+export type SupportedCurrency = z.infer<typeof supportedCurrencySchema>;
 export type InsertProjectStatusUpdate = z.infer<typeof insertProjectStatusUpdateSchema>;
 export type ProjectStatusUpdate = typeof projectStatusUpdates.$inferSelect;
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 export type Quote = typeof quotes.$inferSelect;
+export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
 export type InsertQuoteLineItem = z.infer<typeof insertQuoteLineItemSchema>;
 export type QuoteLineItem = typeof quoteLineItems.$inferSelect;
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoices.$inferSelect;
+export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
 export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
 export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
+export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
+export type SubscriptionInterval = z.infer<typeof subscriptionIntervalSchema>;
+export type PaymentProvider = z.infer<typeof paymentProviderSchema>;
 export type InsertSubscriptionStatusEvent = z.infer<typeof insertSubscriptionStatusEventSchema>;
 export type SubscriptionStatusEvent = typeof subscriptionStatusEvents.$inferSelect;

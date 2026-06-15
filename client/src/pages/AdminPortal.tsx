@@ -38,6 +38,20 @@ import {
   useConvertAdminQuote,
 } from "@/hooks/use-admin";
 import {
+  type BillingModel,
+  billingModelOptions,
+  type ClientStatus,
+  clientStatusOptions,
+  type ProjectStatus,
+  projectStatusOptions,
+  type SubscriptionInterval,
+  subscriptionIntervalOptions,
+  type SubscriptionStatus,
+  subscriptionStatusOptions,
+  type SupportedCurrency,
+  supportedCurrencyOptions,
+} from "@shared/schema";
+import {
   Activity,
   ArrowRightLeft,
   BriefcaseBusiness,
@@ -51,12 +65,6 @@ import {
   Receipt,
   Users,
 } from "lucide-react";
-
-const clientStatusOptions = ["lead", "active", "paused", "archived"];
-const projectStatusOptions = ["lead", "quoted", "active", "maintenance", "completed"];
-const billingModelOptions = ["one_off", "retainer", "hybrid"];
-const subscriptionStatusOptions = ["pending", "active", "paused", "cancelled"];
-const subscriptionIntervalOptions = ["month", "year"];
 
 const metricMeta = [
   { key: "clients", label: "Clients", icon: Users },
@@ -85,7 +93,15 @@ export default function AdminPortal() {
   const updateSubscriptionMutation = useUpdateAdminSubscription();
   const [email, setEmail] = useState("admin@reliefworks.local");
   const [password, setPassword] = useState("change-me");
-  const [clientForm, setClientForm] = useState({
+  const [clientForm, setClientForm] = useState<{
+    name: string;
+    primaryContactName: string;
+    primaryContactEmail: string;
+    primaryContactPhone: string;
+    companyName: string;
+    status: ClientStatus;
+    notes: string;
+  }>({
     name: "",
     primaryContactName: "",
     primaryContactEmail: "",
@@ -94,7 +110,16 @@ export default function AdminPortal() {
     status: "lead",
     notes: "",
   });
-  const [projectForm, setProjectForm] = useState({
+  const [projectForm, setProjectForm] = useState<{
+    clientId: string;
+    name: string;
+    description: string;
+    status: ProjectStatus;
+    billingModel: BillingModel;
+    currency: SupportedCurrency;
+    oneOffAmount: string;
+    monthlyRetainerAmount: string;
+  }>({
     clientId: "",
     name: "",
     description: "",
@@ -104,7 +129,16 @@ export default function AdminPortal() {
     oneOffAmount: "",
     monthlyRetainerAmount: "",
   });
-  const [quoteForm, setQuoteForm] = useState({
+  const [quoteForm, setQuoteForm] = useState<{
+    clientId: string;
+    projectId: string;
+    title: string;
+    scope: string;
+    currency: SupportedCurrency;
+    subtotal: string;
+    taxAmount: string;
+    expiresAt: string;
+  }>({
     clientId: "",
     projectId: "",
     title: "",
@@ -114,7 +148,16 @@ export default function AdminPortal() {
     taxAmount: "0",
     expiresAt: "",
   });
-  const [invoiceForm, setInvoiceForm] = useState({
+  const [invoiceForm, setInvoiceForm] = useState<{
+    clientId: string;
+    projectId: string;
+    quoteId: string;
+    currency: SupportedCurrency;
+    subtotal: string;
+    taxAmount: string;
+    dueAt: string;
+    createPaymentLink: boolean;
+  }>({
     clientId: "",
     projectId: "",
     quoteId: "",
@@ -124,7 +167,15 @@ export default function AdminPortal() {
     dueAt: "",
     createPaymentLink: true,
   });
-  const [subscriptionForm, setSubscriptionForm] = useState({
+  const [subscriptionForm, setSubscriptionForm] = useState<{
+    clientId: string;
+    projectId: string;
+    name: string;
+    status: SubscriptionStatus;
+    currency: SupportedCurrency;
+    amount: string;
+    interval: SubscriptionInterval;
+  }>({
     clientId: "",
     projectId: "",
     name: "",
@@ -421,7 +472,7 @@ export default function AdminPortal() {
         projectId: quoteForm.projectId ? Number(quoteForm.projectId) : null,
         title: quoteForm.title,
         scope: quoteForm.scope || null,
-        currency: quoteForm.currency.toUpperCase(),
+        currency: quoteForm.currency,
         subtotal: Number(quoteForm.subtotal || "0"),
         taxAmount: Number(quoteForm.taxAmount || "0"),
         expiresAt: quoteForm.expiresAt ? new Date(quoteForm.expiresAt) : null,
@@ -460,7 +511,7 @@ export default function AdminPortal() {
         clientId: Number(invoiceForm.clientId),
         projectId: invoiceForm.projectId ? Number(invoiceForm.projectId) : null,
         quoteId: invoiceForm.quoteId ? Number(invoiceForm.quoteId) : null,
-        currency: invoiceForm.currency.toUpperCase(),
+        currency: invoiceForm.currency,
         subtotal: Number(invoiceForm.subtotal || "0"),
         taxAmount: Number(invoiceForm.taxAmount || "0"),
         dueAt: invoiceForm.dueAt ? new Date(invoiceForm.dueAt) : null,
@@ -542,7 +593,7 @@ export default function AdminPortal() {
         projectId: subscriptionForm.projectId ? Number(subscriptionForm.projectId) : null,
         name: subscriptionForm.name,
         status: subscriptionForm.status,
-        currency: subscriptionForm.currency.toUpperCase(),
+        currency: subscriptionForm.currency,
         amount: subscriptionForm.amount,
         interval: subscriptionForm.interval,
         provider: "payfast",
@@ -577,7 +628,7 @@ export default function AdminPortal() {
 
   async function handleUpdateSubscription(
     subscriptionId: number,
-    input: { status?: string; cancelAtPeriodEnd?: boolean },
+    input: { status?: SubscriptionStatus; cancelAtPeriodEnd?: boolean },
   ) {
     try {
       await updateSubscriptionMutation.mutateAsync({ subscriptionId, input });
@@ -1034,7 +1085,7 @@ export default function AdminPortal() {
                     value={clientForm.primaryContactPhone}
                     onChange={(event) => setClientForm((current) => ({ ...current, primaryContactPhone: event.target.value }))}
                   />
-                  <Select value={clientForm.status} onValueChange={(value) => setClientForm((current) => ({ ...current, status: value }))}>
+                  <Select value={clientForm.status} onValueChange={(value) => setClientForm((current) => ({ ...current, status: value as ClientStatus }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Client status" />
                     </SelectTrigger>
@@ -1141,7 +1192,7 @@ export default function AdminPortal() {
                     value={projectForm.name}
                     onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
                   />
-                  <Select value={projectForm.status} onValueChange={(value) => setProjectForm((current) => ({ ...current, status: value }))}>
+                  <Select value={projectForm.status} onValueChange={(value) => setProjectForm((current) => ({ ...current, status: value as ProjectStatus }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Project status" />
                     </SelectTrigger>
@@ -1153,7 +1204,7 @@ export default function AdminPortal() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value }))}>
+                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as BillingModel }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Billing model" />
                     </SelectTrigger>
@@ -1165,11 +1216,18 @@ export default function AdminPortal() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    placeholder="Currency"
-                    value={projectForm.currency}
-                    onChange={(event) => setProjectForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-                  />
+                  <Select value={projectForm.currency} onValueChange={(value) => setProjectForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedCurrencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="One-off amount"
                     value={projectForm.oneOffAmount}
@@ -1346,11 +1404,18 @@ export default function AdminPortal() {
                 />
 
                 <div className="grid gap-4 md:grid-cols-4">
-                  <Input
-                    placeholder="Currency"
-                    value={quoteForm.currency}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-                  />
+                  <Select value={quoteForm.currency} onValueChange={(value) => setQuoteForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedCurrencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="Subtotal"
                     value={quoteForm.subtotal}
@@ -1516,11 +1581,18 @@ export default function AdminPortal() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4">
-                  <Input
-                    placeholder="Currency"
-                    value={invoiceForm.currency}
-                    onChange={(event) => setInvoiceForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-                  />
+                  <Select value={invoiceForm.currency} onValueChange={(value) => setInvoiceForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedCurrencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="Subtotal"
                     value={invoiceForm.subtotal}
@@ -1664,7 +1736,7 @@ export default function AdminPortal() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4">
-                  <Select value={subscriptionForm.status} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, status: value }))}>
+                  <Select value={subscriptionForm.status} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, status: value as SubscriptionStatus }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
@@ -1677,11 +1749,18 @@ export default function AdminPortal() {
                     </SelectContent>
                   </Select>
 
-                  <Input
-                    placeholder="Currency"
-                    value={subscriptionForm.currency}
-                    onChange={(event) => setSubscriptionForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-                  />
+                  <Select value={subscriptionForm.currency} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedCurrencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   <Input
                     placeholder="Amount"
@@ -1689,7 +1768,7 @@ export default function AdminPortal() {
                     onChange={(event) => setSubscriptionForm((current) => ({ ...current, amount: event.target.value }))}
                   />
 
-                  <Select value={subscriptionForm.interval} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, interval: value }))}>
+                  <Select value={subscriptionForm.interval} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, interval: value as SubscriptionInterval }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Interval" />
                     </SelectTrigger>

@@ -10,6 +10,7 @@ import { clearAdminAuthCookie, setAdminAuthCookie } from "./admin-auth.ts";
 import { sendTransactionalEmail } from "./email.ts";
 import { storage } from "./storage.ts";
 import { api } from "@shared/routes";
+import type { SubscriptionStatus, SupportedCurrency } from "@shared/schema";
 import { z } from "zod";
 
 function generateQuoteNumber() {
@@ -72,7 +73,7 @@ const payfastSubscriptionItnInputSchema = z.object({
   signature: z.string().optional(),
 }).passthrough();
 
-function normalizeSubscriptionStatus(input: string | undefined) {
+function normalizeSubscriptionStatus(input: string | undefined): SubscriptionStatus {
   const value = (input || "").toUpperCase();
   if (!value) return "pending";
   if (["ACTIVE", "COMPLETE", "PAID"].includes(value)) return "active";
@@ -188,7 +189,7 @@ export function registerRoutes(app: Express) {
         description: quote.scope,
         status: "active",
         billingModel: "one_off",
-        currency: quote.currency,
+        currency: quote.currency as SupportedCurrency,
         oneOffAmount: quote.totalAmount,
         monthlyRetainerAmount: null,
         startDate: null,
@@ -210,7 +211,7 @@ export function registerRoutes(app: Express) {
         quoteId: quote.id,
         invoiceNumber: generateInvoiceNumber(),
         status: "draft",
-        currency: quote.currency,
+        currency: quote.currency as SupportedCurrency,
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
@@ -443,7 +444,7 @@ export function registerRoutes(app: Express) {
         title: input.title,
         scope: input.scope ?? null,
         status: "draft",
-        currency: input.currency.toUpperCase(),
+        currency: input.currency,
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
@@ -499,7 +500,7 @@ export function registerRoutes(app: Express) {
       await storage.createSubscriptionEvent({
         subscriptionId: record.id,
         fromStatus: null,
-        toStatus: record.status,
+        toStatus: record.status as SubscriptionStatus,
         source: "admin",
         note: "Subscription created",
       });
@@ -543,8 +544,8 @@ export function registerRoutes(app: Express) {
       if (previous.status !== record.status || previous.cancelAtPeriodEnd !== record.cancelAtPeriodEnd) {
         await storage.createSubscriptionEvent({
           subscriptionId: record.id,
-          fromStatus: previous.status,
-          toStatus: record.status,
+          fromStatus: previous.status as SubscriptionStatus,
+          toStatus: record.status as SubscriptionStatus,
           source: "admin",
           note: previous.cancelAtPeriodEnd !== record.cancelAtPeriodEnd
             ? `cancelAtPeriodEnd ${previous.cancelAtPeriodEnd} -> ${record.cancelAtPeriodEnd}`
@@ -577,7 +578,7 @@ export function registerRoutes(app: Express) {
         quoteId: input.quoteId ?? null,
         invoiceNumber: generateInvoiceNumber(),
         status: "draft",
-        currency: input.currency.toUpperCase(),
+        currency: input.currency,
         subtotal: subtotal.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         totalAmount: totalAmount.toFixed(2),

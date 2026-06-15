@@ -8,13 +8,16 @@ import {
 import {
   clients,
   inquiries,
+  type InvoiceStatus,
   type InsertInvoice,
   type InsertQuote,
   type InsertSubscription,
+  type PaymentProvider,
   projects,
   invoices,
   quotes,
   subscriptions,
+  type SubscriptionStatus,
   subscriptionStatusEvents,
   type Client,
   type InsertClient,
@@ -142,7 +145,7 @@ export interface IStorage {
   updateSubscription(
     subscriptionId: number,
     input: {
-      status?: string;
+      status?: SubscriptionStatus;
       cancelAtPeriodEnd?: boolean;
       currentPeriodStart?: Date | null;
       currentPeriodEnd?: Date | null;
@@ -154,10 +157,10 @@ export interface IStorage {
   updateInvoicePaymentDetails(
     invoiceId: number,
     details: {
-      paymentProvider: string;
+      paymentProvider: PaymentProvider;
       paymentLink: string;
       providerInvoiceId: string;
-      status?: string;
+      status?: InvoiceStatus;
     },
   ): Promise<AdminInvoiceRecord>;
   reconcileInvoiceFromPayfast(
@@ -170,7 +173,7 @@ export interface IStorage {
   ): Promise<AdminInvoiceRecord | null>;
   reconcileSubscriptionFromPayfast(input: {
     providerSubscriptionId: string;
-    status: string;
+    status: SubscriptionStatus;
     cancelAtPeriodEnd?: boolean;
     currentPeriodStart?: Date | null;
     currentPeriodEnd?: Date | null;
@@ -645,7 +648,7 @@ export class DatabaseStorage implements IStorage {
   async updateSubscription(
     subscriptionId: number,
     input: {
-      status?: string;
+      status?: SubscriptionStatus;
       cancelAtPeriodEnd?: boolean;
       currentPeriodStart?: Date | null;
       currentPeriodEnd?: Date | null;
@@ -653,7 +656,7 @@ export class DatabaseStorage implements IStorage {
     },
   ): Promise<AdminSubscriptionRecord | null> {
     const updates: {
-      status?: string;
+      status?: SubscriptionStatus;
       cancelAtPeriodEnd?: boolean;
       currentPeriodStart?: Date | null;
       currentPeriodEnd?: Date | null;
@@ -748,7 +751,7 @@ export class DatabaseStorage implements IStorage {
 
   async reconcileSubscriptionFromPayfast(input: {
     providerSubscriptionId: string;
-    status: string;
+    status: SubscriptionStatus;
     cancelAtPeriodEnd?: boolean;
     currentPeriodStart?: Date | null;
     currentPeriodEnd?: Date | null;
@@ -770,8 +773,8 @@ export class DatabaseStorage implements IStorage {
     if (next && existing.status !== next.status) {
       await this.createSubscriptionEvent({
         subscriptionId: existing.id,
-        fromStatus: existing.status,
-        toStatus: next.status,
+        fromStatus: existing.status as SubscriptionStatus,
+        toStatus: next.status as SubscriptionStatus,
         source: "payfast_itn",
         note: input.note ?? null,
       });
@@ -783,10 +786,10 @@ export class DatabaseStorage implements IStorage {
   async updateInvoicePaymentDetails(
     invoiceId: number,
     details: {
-      paymentProvider: string;
+      paymentProvider: PaymentProvider;
       paymentLink: string;
       providerInvoiceId: string;
-      status?: string;
+      status?: InvoiceStatus;
     },
   ): Promise<AdminInvoiceRecord> {
     await db
