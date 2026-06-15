@@ -1,10 +1,24 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+const MemoryStore = createMemoryStore(session);
+
+const isProduction = process.env.NODE_ENV === "production";
+
+declare module "express-session" {
+  interface SessionData {
+    adminUser?: {
+      email: string;
+      name: string;
+    };
+  }
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -21,6 +35,23 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.set("trust proxy", 1);
+app.use(
+  session({
+    name: "reliefworks.sid",
+    secret: process.env.SESSION_SECRET || "relief-works-development-secret",
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    store: new MemoryStore({ checkPeriod: 86400000 }),
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

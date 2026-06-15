@@ -8,6 +8,8 @@ import NotFound from "@/pages/not-found";
 import Manifesto from "@/pages/Manifesto";
 import Services from "@/pages/Services";
 import Diagnosis from "@/pages/Diagnosis";
+import AdminPortal from "@/pages/AdminPortal";
+import QuoteApproval from "@/pages/QuoteApproval";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 
@@ -28,6 +30,8 @@ function Router() {
         <Route path="/" component={Manifesto} />
         <Route path="/services" component={Services} />
         <Route path="/diagnosis" component={Diagnosis} />
+        <Route path="/admin" component={AdminPortal} />
+        <Route path="/quote/:token" component={QuoteApproval} />
         <Route component={NotFound} />
       </Switch>
     </>
