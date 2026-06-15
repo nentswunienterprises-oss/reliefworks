@@ -1,5 +1,4 @@
-import type { Express } from "express";
-import type { RequestHandler } from "express";
+import type { Express, Request, RequestHandler } from "express";
 import { randomUUID } from "crypto";
 import {
   createPayfastPaymentUrl,
@@ -47,6 +46,85 @@ function getAdminCredentials() {
     password: process.env.ADMIN_PASSWORD || "change-me",
     name: process.env.ADMIN_NAME || "Relief Works Admin",
   };
+}
+
+function trimTrailingSlash(value: string) {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function getRequestOrigin(req: Request) {
+  const configuredOrigin = process.env.PUBLIC_APP_ORIGIN;
+  if (configuredOrigin) {
+    return trimTrailingSlash(configuredOrigin);
+  }
+
+  const forwardedProto = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return trimTrailingSlash(`${req.protocol}://${req.get("host")}`);
+}
+
+function getProjectQuoteSubtotal(project: Awaited<ReturnType<typeof storage.getProjectById>>) {
+  if (!project) {
+    return null;
+  }
+
+  const buildAmount = Number(project.oneOffAmount || "0");
+  const monthlyAmount = Number(project.monthlyRetainerAmount || "0");
+  const estimatedMonths = Number(project.estimatedRetainerMonths || 1);
+
+  if (project.billingModel === "retainer") {
+    return Number((monthlyAmount * estimatedMonths).toFixed(2));
+  }
+
+  if (project.billingModel === "hybrid") {
+    return Number(buildAmount.toFixed(2));
+  }
+
+  return Number(buildAmount.toFixed(2));
+}
+
+function getProjectQuoteTitle(project: Awaited<ReturnType<typeof storage.getProjectById>>) {
+  if (!project) {
+    return null;
+  }
+
+  if (project.billingModel === "retainer") {
+    return `${project.name} Retainer`;
+  }
+
+  return project.name;
+}
+
+function getProjectQuoteScope(project: Awaited<ReturnType<typeof storage.getProjectById>>) {
+  if (!project) {
+    return null;
+  }
+
+  const baseScope = project.description || project.name;
+  const buildCopy = project.oneOffAmount
+    ? ` Setup/build amount: ${project.currency} ${project.oneOffAmount}.`
+    : "";
+  const monthlyCopy = project.monthlyRetainerAmount
+    ? ` Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount} per month.`
+    : "";
+  const estimatedMonths = project.estimatedRetainerMonths;
+  const durationCopy = estimatedMonths
+    ? ` Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}.`
+    : "";
+
+  if (project.billingModel === "one_off") {
+    return baseScope;
+  }
+
+  if (project.billingModel === "hybrid") {
+    return `${baseScope}${buildCopy}${project.monthlyRetainerAmount ? ` Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount} per month until cancelled.` : ""}`.trim();
+  }
+
+  return `${baseScope}${buildCopy}${monthlyCopy}${durationCopy}`.trim();
 }
 
 const requireAdmin: RequestHandler = (req, res, next) => {
@@ -418,8 +496,8 @@ export function registerRoutes(app: Express) {
   app.post(api.admin.projects.create.path, requireAdmin, async (req, res) => {
     try {
       const input = api.admin.projects.create.input.parse(req.body);
-      const isRetainer = input.billingModel === "retainer";
-      const startDate = isRetainer && input.estimatedRetainerMonths ? new Date() : null;
+      const hasMaintenanceTerm = input.billingModel === "retainer";
+      const startDate = hasMaintenanceTerm && input.estimatedRetainerMonths ? new Date() : null;
       const endDate = startDate && input.estimatedRetainerMonths
         ? addMonths(startDate, input.estimatedRetainerMonths)
         : null;
@@ -431,10 +509,10 @@ export function registerRoutes(app: Express) {
         status: "lead",
         billingModel: input.billingModel,
         currency: input.currency,
-        oneOffAmount: input.billingModel === "one_off" ? input.oneOffAmount?.toFixed(2) ?? null : null,
-        monthlyRetainerAmount: input.billingModel === "retainer"
-          ? input.monthlyRetainerAmount?.toFixed(2) ?? null
-          : null,
+        oneOffAmount: input.billingModel === "retainer" ? null : input.oneOffAmount?.toFixed(2) ?? null,
+        monthlyRetainerAmount: input.billingModel === "one_off"
+          ? null
+          : input.monthlyRetainerAmount?.toFixed(2) ?? null,
         startDate,
         endDate,
       });
@@ -460,14 +538,10 @@ export function registerRoutes(app: Express) {
       const input = api.admin.quotes.create.input.parse(req.body);
       const project = input.projectId ? await storage.getProjectById(input.projectId) : null;
       const resolvedClientId = project?.clientId ?? input.clientId;
-      const resolvedTitle = input.title ?? project?.name;
-      const resolvedScope = input.scope ?? project?.description ?? null;
+      const resolvedTitle = input.title ?? getProjectQuoteTitle(project);
+      const resolvedScope = input.scope ?? getProjectQuoteScope(project);
       const resolvedCurrency = project?.currency ?? input.currency;
-      const derivedSubtotal = project
-        ? project.billingModel === "retainer"
-          ? Number(project.monthlyRetainerAmount || "0") * Number(project.estimatedRetainerMonths || 1)
-          : Number(project.oneOffAmount || "0")
-        : input.subtotal;
+      const derivedSubtotal = project ? getProjectQuoteSubtotal(project) : input.subtotal;
 
       if (!resolvedClientId) {
         return res.status(400).json({ message: "Quote needs a client or linked project", field: "clientId" });
@@ -502,16 +576,18 @@ export function registerRoutes(app: Express) {
       });
 
       const client = (await storage.listClients()).find((item) => item.id === quote.clientId);
-      if (client?.primaryContactEmail && quote.approvalToken) {
-        const origin = process.env.PUBLIC_APP_ORIGIN || req.protocol + "://" + req.get("host");
-        const approvalLink = `${origin}/quote/${quote.approvalToken}`;
+      const recipientEmail = input.recipientEmail?.trim() || client?.primaryContactEmail;
+      if (recipientEmail && quote.approvalToken) {
+        const approvalLink = `${getRequestOrigin(req)}/quote/${quote.approvalToken}`;
 
-        void sendEmailSafely({
-          to: client.primaryContactEmail,
+        await sendEmailSafely({
+          to: recipientEmail,
           subject: `Quote ${quote.quoteNumber} from Relief Works`,
-          text: `Hello ${client.primaryContactName || client.name}, your quote ${quote.quoteNumber} is ready. Review and approve here: ${approvalLink}`,
-          html: `<p>Hello ${client.primaryContactName || client.name},</p><p>Your quote <strong>${quote.quoteNumber}</strong> is ready.</p><p><a href="${approvalLink}">Review and approve your quote</a></p>`,
+          text: `Hello ${client?.primaryContactName || client?.name || "there"}, your quote ${quote.quoteNumber} is ready. Review and approve here: ${approvalLink}`,
+          html: `<p>Hello ${client?.primaryContactName || client?.name || "there"},</p><p>Your quote <strong>${quote.quoteNumber}</strong> is ready.</p><p><a href="${approvalLink}">Review and approve your quote</a></p>`,
         });
+      } else if (!recipientEmail) {
+        console.warn(`Quote ${quote.quoteNumber} created without recipient email. No notification sent.`);
       }
 
       res.status(201).json(quote);
@@ -648,7 +724,7 @@ export function registerRoutes(app: Express) {
         const paymentCopy = invoice.paymentLink
           ? `Pay securely using this link: ${invoice.paymentLink}`
           : "You will receive payment instructions shortly.";
-        void sendEmailSafely({
+        await sendEmailSafely({
           to: invoice.clientEmail,
           subject: `Invoice ${invoice.invoiceNumber} from Relief Works`,
           text: `Your invoice ${invoice.invoiceNumber} for ${invoice.currency} ${invoice.totalAmount} is ready. ${paymentCopy}`,
@@ -727,7 +803,7 @@ export function registerRoutes(app: Express) {
     if (approved) {
       try {
         const converted = await convertApprovedQuote(approved.id);
-        void sendEmailSafely({
+        await sendEmailSafely({
           to: converted.invoice.clientEmail,
           subject: `Invoice ${converted.invoice.invoiceNumber} created from approved quote`,
           text: `Your approved quote ${converted.quote.quoteNumber} has been converted to invoice ${converted.invoice.invoiceNumber}. Pay here: ${converted.invoice.paymentLink || "(payment link unavailable)"}`,
@@ -750,7 +826,7 @@ export function registerRoutes(app: Express) {
     try {
       const converted = await convertApprovedQuote(parsed.data);
 
-      void sendEmailSafely({
+      await sendEmailSafely({
         to: converted.invoice.clientEmail,
         subject: `Invoice ${converted.invoice.invoiceNumber} created from approved quote`,
         text: `Your approved quote ${converted.quote.quoteNumber} has been converted to invoice ${converted.invoice.invoiceNumber}. Pay here: ${converted.invoice.paymentLink || "(payment link unavailable)"}`,

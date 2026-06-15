@@ -36,32 +36,32 @@ export const adminCreateProjectInputSchema = z.object({
   clientId: z.number(),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
-  billingModel: billingModelSchema.refine((value) => value !== "hybrid", {
-    message: "Choose either once-off or retainer billing.",
-  }),
+  billingModel: billingModelSchema,
   currency: supportedCurrencySchema.default("ZAR"),
   oneOffAmount: z.number().min(0).nullable().optional(),
   monthlyRetainerAmount: z.number().min(0).nullable().optional(),
   estimatedRetainerMonths: z.number().int().min(1).max(60).nullable().optional(),
 }).superRefine((input, ctx) => {
-  if (input.billingModel === "one_off" && input.oneOffAmount == null) {
+  if ((input.billingModel === "one_off" || input.billingModel === "hybrid") && input.oneOffAmount == null) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Once-off projects need a build amount.",
+      message: input.billingModel === "hybrid" ? "Hybrid projects need a setup amount." : "Once-off projects need a build amount.",
       path: ["oneOffAmount"],
     });
   }
 
-  if (input.billingModel === "retainer") {
+  if (input.billingModel === "retainer" || input.billingModel === "hybrid") {
     if (input.monthlyRetainerAmount == null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Retainer projects need a monthly maintenance amount.",
+        message: input.billingModel === "hybrid"
+          ? "Hybrid projects need a monthly maintenance amount."
+          : "Retainer projects need a monthly maintenance amount.",
         path: ["monthlyRetainerAmount"],
       });
     }
 
-    if (input.estimatedRetainerMonths == null) {
+    if (input.billingModel === "retainer" && input.estimatedRetainerMonths == null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Retainer projects need estimated months.",
@@ -168,6 +168,7 @@ export const adminCreateQuoteInputSchema = z.object({
   title: z.string().min(1).optional(),
   scope: z.string().nullable().optional(),
   currency: supportedCurrencySchema.optional().default('ZAR'),
+  recipientEmail: z.string().email().optional(),
   subtotal: z.number().min(0).optional(),
   taxAmount: z.number().min(0).default(0),
   expiresAt: z.coerce.date().nullable().optional(),

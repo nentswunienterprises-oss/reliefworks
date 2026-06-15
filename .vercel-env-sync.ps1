@@ -1,4 +1,18 @@
 $ErrorActionPreference = "Stop"
+$localEnv = @{}
+if (Test-Path ".env") {
+  Get-Content ".env" | ForEach-Object {
+    if ($_ -match '^\s*#' -or $_ -notmatch '=') {
+      return
+    }
+
+    $parts = $_ -split '=', 2
+    if ($parts.Length -eq 2) {
+      $localEnv[$parts[0].Trim()] = $parts[1].Trim()
+    }
+  }
+}
+
 $envMap = @{
   "SUPABASE_URL" = "https://pzqhneluoquohtskfwkr.supabase.co"
   "SUPABASE_ANON_KEY" = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6cWhuZWx1b3F1b2h0c2tmd2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MDk1MzgsImV4cCI6MjA4NTE4NTUzOH0.1OLP9llu3dZyZxjLlIEpkwRzMK4ryp-2YmBrQDVuD00"
@@ -15,6 +29,13 @@ $envMap = @{
   "PAYFAST_SANDBOX_RETURN_URL" = "https://relief-works-website.vercel.app/payments/success"
   "PAYFAST_SANDBOX_CANCEL_URL" = "https://relief-works-website.vercel.app/payments/cancelled"
   "PAYFAST_SANDBOX_NOTIFY_URL" = "https://relief-works-website.vercel.app/api/payfast/itn"
+  "RESEND_FROM_EMAIL" = "Relief Works <quotes@reliefworks.tech>"
+  "PUBLIC_APP_ORIGIN" = "https://reliefworks.tech"
+}
+
+$resendApiKey = if ($env:RESEND_API_KEY) { $env:RESEND_API_KEY } else { $localEnv["RESEND_API_KEY"] }
+if ($resendApiKey) {
+  $envMap["RESEND_API_KEY"] = $resendApiKey
 }
 
 foreach ($name in $envMap.Keys) {

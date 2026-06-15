@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import type { AdminProject } from "@shared/routes";
+import type { AdminProject, AdminQuote } from "@shared/routes";
 import {
   useAdminClients,
   useAdminDashboardSummary,
@@ -78,10 +78,6 @@ function formatLabel(value: string) {
   return value.replace(/_/g, " ");
 }
 
-const projectCommercialOptions = billingModelOptions.filter(
-  (option): option is Exclude<BillingModel, "hybrid"> => option !== "hybrid",
-);
-
 export default function AdminPortal() {
   const { toast } = useToast();
   const sessionQuery = useAdminSession();
@@ -117,7 +113,7 @@ export default function AdminPortal() {
     clientId: string;
     name: string;
     description: string;
-    billingModel: Exclude<BillingModel, "hybrid">;
+    billingModel: BillingModel;
     currency: SupportedCurrency;
     oneOffAmount: string;
     monthlyRetainerAmount: string;
@@ -138,6 +134,7 @@ export default function AdminPortal() {
     title: string;
     scope: string;
     currency: SupportedCurrency;
+    recipientEmail: string;
     subtotal: string;
     taxAmount: string;
     expiresAt: string;
@@ -147,6 +144,7 @@ export default function AdminPortal() {
     title: "",
     scope: "",
     currency: "ZAR",
+    recipientEmail: "",
     subtotal: "",
     taxAmount: "0",
     expiresAt: "",
@@ -213,15 +211,29 @@ export default function AdminPortal() {
     return project?.estimatedRetainerMonths ?? null;
   }
 
+  function getProjectBuildAmount(project: AdminProject | null) {
+    return Number(project?.oneOffAmount || "0");
+  }
+
+  function getProjectMonthlyAmount(project: AdminProject | null) {
+    return Number(project?.monthlyRetainerAmount || "0");
+  }
+
   function getProjectQuoteSubtotal(project: AdminProject | null) {
     if (!project) {
       return "";
     }
 
+    const buildAmount = getProjectBuildAmount(project);
+    const monthlyAmount = getProjectMonthlyAmount(project);
+    const estimatedMonths = Number(project.estimatedRetainerMonths || 1);
+
     if (project.billingModel === "retainer") {
-      const monthlyAmount = Number(project.monthlyRetainerAmount || "0");
-      const estimatedMonths = Number(project.estimatedRetainerMonths || 1);
       return (monthlyAmount * estimatedMonths).toFixed(2);
+    }
+
+    if (project.billingModel === "hybrid") {
+      return buildAmount.toFixed(2);
     }
 
     return project.oneOffAmount || "";
@@ -244,13 +256,51 @@ export default function AdminPortal() {
       return "";
     }
 
-    if (project.billingModel === "retainer") {
+    if (project.billingModel === "retainer" || project.billingModel === "hybrid") {
       const estimatedMonths = getProjectEstimatedMonths(project);
+      const buildCopy = project.oneOffAmount ? ` Setup/build amount: ${project.currency} ${project.oneOffAmount}.` : "";
+      if (project.billingModel === "hybrid") {
+        return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month until cancelled.`.trim();
+      }
+
       const durationCopy = estimatedMonths ? ` Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}.` : "";
-      return `${project.description || project.name} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month.${durationCopy}`.trim();
+      return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month.${durationCopy}`.trim();
     }
 
     return project.description || project.name;
+  }
+
+  function getQuoteApprovalHref(quote: AdminQuote) {
+    if (!quote.approvalToken) {
+      return null;
+    }
+
+    if (typeof window === "undefined") {
+      return `/quote/${quote.approvalToken}`;
+    }
+
+    return new URL(`/quote/${quote.approvalToken}`, window.location.origin).toString();
+  }
+
+  async function handleCopyQuoteApprovalLink(quote: AdminQuote) {
+    const approvalLink = getQuoteApprovalHref(quote);
+    if (!approvalLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(approvalLink);
+      toast({
+        title: "Approval link copied",
+        description: `The client approval link for ${quote.quoteNumber} is ready to share.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: error instanceof Error ? error.message : "Unable to copy the approval link.",
+        variant: "destructive",
+      });
+    }
   }
 
   const workspaceProjects = workspaceClientId
@@ -315,8 +365,14 @@ export default function AdminPortal() {
     setWorkspaceClientId(clientId);
     setWorkspaceProjectId("");
     setWorkspaceQuoteId("");
+    const client = clients.find((item) => String(item.id) === clientId);
     setProjectForm((current) => ({ ...current, clientId }));
-    setQuoteForm((current) => ({ ...current, clientId, projectId: "" }));
+    setQuoteForm((current) => ({
+      ...current,
+      clientId,
+      projectId: "",
+      recipientEmail: client?.primaryContactEmail || current.recipientEmail,
+    }));
     setInvoiceForm((current) => ({ ...current, clientId, projectId: "", quoteId: "" }));
     setSubscriptionForm((current) => ({ ...current, clientId, projectId: "" }));
   }
@@ -337,6 +393,7 @@ export default function AdminPortal() {
     }
 
     const clientId = String(project.clientId);
+    const projectClient = clients.find((item) => item.id === project.clientId);
 
     setWorkspaceClientId(clientId);
     setWorkspaceProjectId(projectId);
@@ -349,6 +406,7 @@ export default function AdminPortal() {
       title: getProjectQuoteTitle(project),
       scope: getProjectQuoteScope(project),
       currency: current.currency === "ZAR" ? project.currency : current.currency,
+      recipientEmail: projectClient?.primaryContactEmail || current.recipientEmail,
       subtotal: getProjectQuoteSubtotal(project),
     }));
     setInvoiceForm((current) => ({
@@ -504,10 +562,10 @@ export default function AdminPortal() {
         description: projectForm.description || null,
         billingModel: projectForm.billingModel,
         currency: projectForm.currency,
-        oneOffAmount: projectForm.billingModel === "one_off" && projectForm.oneOffAmount
+        oneOffAmount: projectForm.billingModel !== "retainer" && projectForm.oneOffAmount
           ? Number(projectForm.oneOffAmount)
           : null,
-        monthlyRetainerAmount: projectForm.billingModel === "retainer" && projectForm.monthlyRetainerAmount
+        monthlyRetainerAmount: projectForm.billingModel !== "one_off" && projectForm.monthlyRetainerAmount
           ? Number(projectForm.monthlyRetainerAmount)
           : null,
         estimatedRetainerMonths: projectForm.billingModel === "retainer"
@@ -520,7 +578,7 @@ export default function AdminPortal() {
         clientId: String(project.clientId),
         name: "",
         description: "",
-        billingModel: project.billingModel === "retainer" ? "retainer" : "one_off",
+        billingModel: project.billingModel,
         currency: project.currency,
         oneOffAmount: "",
         monthlyRetainerAmount: "",
@@ -555,6 +613,7 @@ export default function AdminPortal() {
         title: getProjectQuoteTitle(project),
         scope: getProjectQuoteScope(project),
         currency: project.currency,
+        recipientEmail: quoteForm.recipientEmail?.trim() || undefined,
         subtotal: Number(getProjectQuoteSubtotal(project) || "0"),
         taxAmount: Number(quoteForm.taxAmount || "0"),
         expiresAt: quoteForm.expiresAt ? new Date(quoteForm.expiresAt) : null,
@@ -567,6 +626,7 @@ export default function AdminPortal() {
         title: "",
         scope: "",
         currency: quote.currency,
+        recipientEmail: "",
         subtotal: "",
         taxAmount: "0",
         expiresAt: "",
@@ -574,7 +634,7 @@ export default function AdminPortal() {
 
       toast({
         title: "Quote created",
-        description: `Quote saved. Invoice creation is now primed for ${quote.quoteNumber}.`,
+        description: `Quote saved. Invoice creation is now primed for ${quote.quoteNumber}, and the approval link is available on the quote card.`,
       });
     } catch (error) {
       toast({
@@ -1285,12 +1345,12 @@ export default function AdminPortal() {
                     value={projectForm.name}
                     onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
                   />
-                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as Exclude<BillingModel, "hybrid"> }))}>
+                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as BillingModel }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Billing model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {projectCommercialOptions.map((option) => (
+                      {billingModelOptions.map((option) => (
                         <SelectItem key={option} value={option}>
                           {formatLabel(option)}
                         </SelectItem>
@@ -1309,16 +1369,20 @@ export default function AdminPortal() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    placeholder={projectForm.billingModel === "retainer" ? "Setup amount (optional)" : "Build amount"}
-                    value={projectForm.oneOffAmount}
-                    onChange={(event) => setProjectForm((current) => ({ ...current, oneOffAmount: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Monthly maintenance amount"
-                    value={projectForm.monthlyRetainerAmount}
-                    onChange={(event) => setProjectForm((current) => ({ ...current, monthlyRetainerAmount: event.target.value }))}
-                  />
+                  {projectForm.billingModel !== "retainer" && (
+                    <Input
+                      placeholder={projectForm.billingModel === "hybrid" ? "Setup amount" : "Build amount"}
+                      value={projectForm.oneOffAmount}
+                      onChange={(event) => setProjectForm((current) => ({ ...current, oneOffAmount: event.target.value }))}
+                    />
+                  )}
+                  {projectForm.billingModel !== "one_off" && (
+                    <Input
+                      placeholder="Monthly maintenance amount"
+                      value={projectForm.monthlyRetainerAmount}
+                      onChange={(event) => setProjectForm((current) => ({ ...current, monthlyRetainerAmount: event.target.value }))}
+                    />
+                  )}
                   {projectForm.billingModel === "retainer" && (
                     <Input
                       placeholder="Estimated months"
@@ -1479,6 +1543,12 @@ export default function AdminPortal() {
                           <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
                         </p>
                       )}
+                      {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
+                        <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
+                      )}
+                      {selectedProject.billingModel === "hybrid" && (
+                        <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
+                      )}
                       <p><span className="text-foreground">Scope:</span> {getProjectQuoteScope(selectedProject)}</p>
                     </div>
                   ) : (
@@ -1488,7 +1558,13 @@ export default function AdminPortal() {
                   )}
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Input
+                    placeholder="Recipient email"
+                    type="email"
+                    value={quoteForm.recipientEmail}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, recipientEmail: event.target.value }))}
+                  />
                   <Input
                     placeholder="Currency"
                     value={selectedProject?.currency || quoteForm.currency}
@@ -1581,6 +1657,26 @@ export default function AdminPortal() {
                       >
                         Convert to Project + Invoice
                       </Button>
+                      {quote.approvalToken && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleCopyQuoteApprovalLink(quote)}
+                          type="button"
+                        >
+                          Copy Approval Link
+                        </Button>
+                      )}
+                      {quote.approvalToken && getQuoteApprovalHref(quote) && (
+                        <a
+                          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                          href={getQuoteApprovalHref(quote) ?? "#"}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Open Approval Page
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}

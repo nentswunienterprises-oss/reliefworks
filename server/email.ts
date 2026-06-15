@@ -9,9 +9,8 @@ export async function sendTransactionalEmail(input: TransactionalEmailInput): Pr
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
 
-  // Keep platform workflows non-blocking when email is not yet configured.
   if (!apiKey || !from) {
-    return;
+    throw new Error("Transactional email is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL.");
   }
 
   const response = await fetch("https://api.resend.com/emails", {
