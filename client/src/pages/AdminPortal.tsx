@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ScopeRichText } from "@/components/ScopeRichText";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -202,10 +203,13 @@ export default function AdminPortal() {
   const projects = projectsQuery.data ?? [];
   const quotes = quotesQuery.data ?? [];
   const invoices = invoicesQuery.data ?? [];
+  const subscriptions = subscriptionsQuery.data ?? [];
+  const subscriptionEvents = subscriptionEventsQuery.data ?? [];
 
   const selectedClient = clients.find((client) => String(client.id) === workspaceClientId) ?? null;
   const selectedProject = projects.find((project) => String(project.id) === workspaceProjectId) ?? null;
   const selectedQuote = quotes.find((quote) => String(quote.id) === workspaceQuoteId) ?? null;
+  const hasActiveWorkflow = Boolean(workspaceClientId || workspaceProjectId || workspaceQuoteId);
 
   function getProjectEstimatedMonths(project: AdminProject | null) {
     return project?.estimatedRetainerMonths ?? null;
@@ -256,18 +260,35 @@ export default function AdminPortal() {
       return "";
     }
 
+    const baseScope = (project.description || project.name).trim();
+
     if (project.billingModel === "retainer" || project.billingModel === "hybrid") {
       const estimatedMonths = getProjectEstimatedMonths(project);
-      const buildCopy = project.oneOffAmount ? ` Setup/build amount: ${project.currency} ${project.oneOffAmount}.` : "";
-      if (project.billingModel === "hybrid") {
-        return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month until cancelled.`.trim();
+      const billingLines: string[] = [];
+
+      if (project.oneOffAmount) {
+        billingLines.push(`- Setup/build amount: ${project.currency} ${project.oneOffAmount}`);
       }
 
-      const durationCopy = estimatedMonths ? ` Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}.` : "";
-      return `${project.description || project.name}${buildCopy} Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month.${durationCopy}`.trim();
+      if (project.billingModel === "hybrid") {
+        billingLines.push(
+          `- Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month until cancelled`,
+        );
+      } else {
+        billingLines.push(
+          `- Monthly maintenance: ${project.currency} ${project.monthlyRetainerAmount || "0.00"} per month`,
+        );
+        if (estimatedMonths) {
+          billingLines.push(
+            `- Estimated term: ${estimatedMonths} month${estimatedMonths === 1 ? "" : "s"}`,
+          );
+        }
+      }
+
+      return [baseScope, "## Relief Works Billing Context", billingLines.join("\n")].join("\n\n");
     }
 
-    return project.description || project.name;
+    return baseScope;
   }
 
   function getQuoteApprovalHref(quote: AdminQuote) {
@@ -315,6 +336,36 @@ export default function AdminPortal() {
     }
     return true;
   });
+  const workspaceInvoices = invoices.filter((invoice) => {
+    if (workspaceClientId && String(invoice.clientId) !== workspaceClientId) {
+      return false;
+    }
+    if (workspaceProjectId && String(invoice.projectId ?? "") !== workspaceProjectId) {
+      return false;
+    }
+    if (workspaceQuoteId && String(invoice.quoteId ?? "") !== workspaceQuoteId) {
+      return false;
+    }
+    return true;
+  });
+  const workspaceSubscriptions = subscriptions.filter((subscription) => {
+    if (workspaceClientId && String(subscription.clientId) !== workspaceClientId) {
+      return false;
+    }
+    if (workspaceProjectId && String(subscription.projectId ?? "") !== workspaceProjectId) {
+      return false;
+    }
+    return true;
+  });
+  const workspaceSubscriptionIds = new Set(workspaceSubscriptions.map((subscription) => subscription.id));
+  const workspaceSubscriptionEvents = subscriptionEvents.filter((event) =>
+    workspaceSubscriptionIds.has(event.subscriptionId),
+  );
+  const visibleProjects = hasActiveWorkflow ? workspaceProjects : projects;
+  const visibleQuotes = hasActiveWorkflow ? workspaceQuotes : quotes;
+  const visibleInvoices = hasActiveWorkflow ? workspaceInvoices : invoices;
+  const visibleSubscriptions = hasActiveWorkflow ? workspaceSubscriptions : subscriptions;
+  const visibleSubscriptionEvents = hasActiveWorkflow ? workspaceSubscriptionEvents : subscriptionEvents;
 
   const quoteProjects = quoteForm.clientId
     ? projects.filter((project) => String(project.clientId) === quoteForm.clientId)
@@ -901,126 +952,147 @@ export default function AdminPortal() {
   return (
     <div className="min-h-screen bg-background text-foreground px-6 py-8 md:px-12">
       <main className="mx-auto max-w-7xl space-y-8">
-        <section className="grid gap-6 rounded-[2rem] border border-border/40 bg-card px-8 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-end">
-          <div className="space-y-4">
-            <Badge variant="outline" className="border-primary/30 text-primary">
-              Relief Works Admin
-            </Badge>
-            <h1 className="font-display text-4xl leading-tight text-primary md:text-6xl">
-              The business now has a command center.
-            </h1>
-            <p className="max-w-3xl text-lg leading-relaxed text-muted-foreground">
-              This is the first operational layer: secure access, live totals, and the
-              intake pulse feeding the future CRM, quotation, invoicing, and maintenance system.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-background/70 p-5">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Signed in as
-              </p>
-              <p className="mt-2 text-lg font-medium text-foreground">{session?.user?.name}</p>
-              <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
-            </div>
-            <Button variant="outline" onClick={handleLogout} disabled={logoutMutation.isPending}>
-              <LogOut className="h-4 w-4" />
-              {logoutMutation.isPending ? "Closing..." : "Log Out"}
-            </Button>
-          </div>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {metricMeta.map(({ key, label, icon: Icon }) => (
-            <Card key={key} className="border-border/50 bg-card/80">
-              <CardHeader className="flex flex-row items-start justify-between space-y-0">
-                <div>
-                  <CardDescription>{label}</CardDescription>
-                  <CardTitle className="mt-3 font-display text-4xl text-primary">
-                    {dashboardQuery.isLoading ? "--" : summary?.totals[key] ?? 0}
-                  </CardTitle>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <Icon className="h-5 w-5" />
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <CardTitle className="font-display text-3xl text-primary">
-                Incoming inquiries
-              </CardTitle>
-              <CardDescription>
-                The current lead pulse before those records are converted into clients and projects.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {dashboardQuery.isLoading && (
-                <p className="text-sm text-muted-foreground">Loading inquiry activity...</p>
-              )}
-
-              {!dashboardQuery.isLoading && summary?.recentInquiries.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No inquiries yet. The intake layer is active and waiting.
+        {!hasActiveWorkflow && (
+          <>
+            <section className="grid gap-6 rounded-[2rem] border border-border/40 bg-card px-8 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-end">
+              <div className="space-y-4">
+                <Badge variant="outline" className="border-primary/30 text-primary">
+                  Relief Works Admin
+                </Badge>
+                <h1 className="font-display text-4xl leading-tight text-primary md:text-6xl">
+                  The business now has a command center.
+                </h1>
+                <p className="max-w-3xl text-lg leading-relaxed text-muted-foreground">
+                  This is the first operational layer: secure access, live totals, and the
+                  intake pulse feeding the future CRM, quotation, invoicing, and maintenance system.
                 </p>
-              )}
-
-              {summary?.recentInquiries.map((inquiry) => (
-                <div
-                  key={inquiry.id}
-                  className="rounded-2xl border border-border/50 bg-background/65 p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-medium text-foreground">{inquiry.name}</h3>
-                        <Badge variant="outline">{inquiry.pressureType}</Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          {inquiry.email}
-                        </span>
-                        {inquiry.company && <span>{inquiry.company}</span>}
-                        {inquiry.role && <span>{inquiry.role}</span>}
-                      </div>
-                    </div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                      {inquiry.createdAt
-                        ? new Date(inquiry.createdAt).toLocaleDateString()
-                        : "No date"}
-                    </p>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                    {inquiry.message}
+              </div>
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-background/70 p-5">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    Signed in as
                   </p>
-                  <div className="mt-4">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={createClientMutation.isPending}
-                      onClick={() => handleCreateClientFromInquiry(inquiry)}
-                    >
-                      Create Client From Inquiry
-                    </Button>
-                  </div>
+                  <p className="mt-2 text-lg font-medium text-foreground">{session?.user?.name}</p>
+                  <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
                 </div>
+                <Button variant="outline" onClick={handleLogout} disabled={logoutMutation.isPending}>
+                  <LogOut className="h-4 w-4" />
+                  {logoutMutation.isPending ? "Closing..." : "Log Out"}
+                </Button>
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {metricMeta.map(({ key, label, icon: Icon }) => (
+                <Card key={key} className="border-border/50 bg-card/80">
+                  <CardHeader className="flex flex-row items-start justify-between space-y-0">
+                    <div>
+                      <CardDescription>{label}</CardDescription>
+                      <CardTitle className="mt-3 font-display text-4xl text-primary">
+                        {dashboardQuery.isLoading ? "--" : summary?.totals[key] ?? 0}
+                      </CardTitle>
+                    </div>
+                    <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </CardHeader>
+                </Card>
               ))}
-            </CardContent>
-          </Card>
+            </section>
+          </>
+        )}
+
+        <section className={hasActiveWorkflow ? "space-y-6" : "grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"}>
+          {!hasActiveWorkflow && (
+            <Card className="border-border/50 bg-card/85">
+              <CardHeader>
+                <CardTitle className="font-display text-3xl text-primary">
+                  Incoming inquiries
+                </CardTitle>
+                <CardDescription>
+                  The current lead pulse before those records are converted into clients and projects.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {dashboardQuery.isLoading && (
+                  <p className="text-sm text-muted-foreground">Loading inquiry activity...</p>
+                )}
+
+                {!dashboardQuery.isLoading && summary?.recentInquiries.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No inquiries yet. The intake layer is active and waiting.
+                  </p>
+                )}
+
+                {summary?.recentInquiries.map((inquiry) => (
+                  <div
+                    key={inquiry.id}
+                    className="rounded-2xl border border-border/50 bg-background/65 p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-medium text-foreground">{inquiry.name}</h3>
+                          <Badge variant="outline">{inquiry.pressureType}</Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span className="inline-flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            {inquiry.email}
+                          </span>
+                          {inquiry.company && <span>{inquiry.company}</span>}
+                          {inquiry.role && <span>{inquiry.role}</span>}
+                        </div>
+                      </div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        {inquiry.createdAt
+                          ? new Date(inquiry.createdAt).toLocaleDateString()
+                          : "No date"}
+                      </p>
+                    </div>
+                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                      {inquiry.message}
+                    </p>
+                    <div className="mt-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={createClientMutation.isPending}
+                        onClick={() => handleCreateClientFromInquiry(inquiry)}
+                      >
+                        Create Client From Inquiry
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-border/50 bg-card/85">
             <CardHeader>
-              <CardTitle className="font-display text-3xl text-primary">
-                Active workflow
-              </CardTitle>
-              <CardDescription>
-                Keep one client context active so project, quote, invoice, and subscription work feels connected.
-              </CardDescription>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="font-display text-3xl text-primary">
+                    Active workflow
+                  </CardTitle>
+                  <CardDescription>
+                    Keep one client context active so project, quote, invoice, and subscription work feels connected.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {hasActiveWorkflow && (
+                    <Button type="button" variant="outline" onClick={() => applyClientWorkspace("")}>
+                      Exit workflow
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={handleLogout} disabled={logoutMutation.isPending}>
+                    <LogOut className="h-4 w-4" />
+                    {logoutMutation.isPending ? "Closing..." : "Log Out"}
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid gap-4 md:grid-cols-3">
@@ -1192,117 +1264,119 @@ export default function AdminPortal() {
           </Card>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Clients
-                  </CardTitle>
-                  <CardDescription>
-                    Add and review the companies and contacts Relief Works manages.
-                  </CardDescription>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <Users className="h-5 w-5" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form className="grid gap-4" onSubmit={handleCreateClient}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input
-                    placeholder="Client name"
-                    value={clientForm.name}
-                    onChange={(event) => setClientForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Company name"
-                    value={clientForm.companyName}
-                    onChange={(event) => setClientForm((current) => ({ ...current, companyName: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Primary contact"
-                    value={clientForm.primaryContactName}
-                    onChange={(event) => setClientForm((current) => ({ ...current, primaryContactName: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Primary email"
-                    type="email"
-                    value={clientForm.primaryContactEmail}
-                    onChange={(event) => setClientForm((current) => ({ ...current, primaryContactEmail: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Phone"
-                    value={clientForm.primaryContactPhone}
-                    onChange={(event) => setClientForm((current) => ({ ...current, primaryContactPhone: event.target.value }))}
-                  />
-                  <Select value={clientForm.status} onValueChange={(value) => setClientForm((current) => ({ ...current, status: value as ClientStatus }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Client status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientStatusOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Textarea
-                  placeholder="Operational notes, billing context, or delivery details"
-                  value={clientForm.notes}
-                  onChange={(event) => setClientForm((current) => ({ ...current, notes: event.target.value }))}
-                />
-                <Button type="submit" disabled={createClientMutation.isPending}>
-                  {createClientMutation.isPending ? "Creating client..." : "Create Client"}
-                </Button>
-              </form>
-
-              <div className="space-y-3">
-                {clientsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading clients...</p>}
-                {!clientsQuery.isLoading && clientsQuery.data?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No clients yet. Add the first one above.</p>
-                )}
-                {clientsQuery.data?.map((client) => (
-                  <div
-                    key={client.id}
-                    className={`rounded-2xl border p-4 ${
-                      selectedClient?.id === client.id
-                        ? "border-primary/50 bg-primary/5"
-                        : "border-border/50 bg-background/65"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{client.name}</h3>
-                          <Badge variant="outline">{client.status}</Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {client.companyName || "No company specified"}
-                        </p>
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          {client.primaryContactName || client.primaryContactEmail}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{client.primaryContactEmail}</p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={selectedClient?.id === client.id ? "secondary" : "outline"}
-                        onClick={() => applyClientWorkspace(String(client.id))}
-                      >
-                        {selectedClient?.id === client.id ? "In workflow" : "Focus"}
-                      </Button>
-                    </div>
+        <section className={`grid gap-6 ${hasActiveWorkflow ? "" : "xl:grid-cols-[1fr_1fr]"}`}>
+          {!hasActiveWorkflow && (
+            <Card className="border-border/50 bg-card/85">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="font-display text-3xl text-primary">
+                      Clients
+                    </CardTitle>
+                    <CardDescription>
+                      Add and review the companies and contacts Relief Works manages.
+                    </CardDescription>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
+                    <Users className="h-5 w-5" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <form className="grid gap-4" onSubmit={handleCreateClient}>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Input
+                      placeholder="Client name"
+                      value={clientForm.name}
+                      onChange={(event) => setClientForm((current) => ({ ...current, name: event.target.value }))}
+                    />
+                    <Input
+                      placeholder="Company name"
+                      value={clientForm.companyName}
+                      onChange={(event) => setClientForm((current) => ({ ...current, companyName: event.target.value }))}
+                    />
+                    <Input
+                      placeholder="Primary contact"
+                      value={clientForm.primaryContactName}
+                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactName: event.target.value }))}
+                    />
+                    <Input
+                      placeholder="Primary email"
+                      type="email"
+                      value={clientForm.primaryContactEmail}
+                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactEmail: event.target.value }))}
+                    />
+                    <Input
+                      placeholder="Phone"
+                      value={clientForm.primaryContactPhone}
+                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactPhone: event.target.value }))}
+                    />
+                    <Select value={clientForm.status} onValueChange={(value) => setClientForm((current) => ({ ...current, status: value as ClientStatus }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Client status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clientStatusOptions.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Textarea
+                    placeholder="Operational notes, billing context, or delivery details"
+                    value={clientForm.notes}
+                    onChange={(event) => setClientForm((current) => ({ ...current, notes: event.target.value }))}
+                  />
+                  <Button type="submit" disabled={createClientMutation.isPending}>
+                    {createClientMutation.isPending ? "Creating client..." : "Create Client"}
+                  </Button>
+                </form>
+
+                <div className="space-y-3">
+                  {clientsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading clients...</p>}
+                  {!clientsQuery.isLoading && clients.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No clients yet. Add the first one above.</p>
+                  )}
+                  {clients.map((client) => (
+                    <div
+                      key={client.id}
+                      className={`rounded-2xl border p-4 ${
+                        selectedClient?.id === client.id
+                          ? "border-primary/50 bg-primary/5"
+                          : "border-border/50 bg-background/65"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-medium text-foreground">{client.name}</h3>
+                            <Badge variant="outline">{client.status}</Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {client.companyName || "No company specified"}
+                          </p>
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            {client.primaryContactName || client.primaryContactEmail}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{client.primaryContactEmail}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={selectedClient?.id === client.id ? "secondary" : "outline"}
+                          onClick={() => applyClientWorkspace(String(client.id))}
+                        >
+                          {selectedClient?.id === client.id ? "In workflow" : "Focus"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-border/50 bg-card/85">
             <CardHeader>
@@ -1391,11 +1465,27 @@ export default function AdminPortal() {
                     />
                   )}
                 </div>
-                <Textarea
-                  placeholder="Project scope and delivery framing"
-                  value={projectForm.description}
-                  onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-                />
+                <div className="space-y-3">
+                  <Textarea
+                    className="min-h-[220px]"
+                    placeholder="Paste a ChatGPT scope with headings, bullets, and delivery framing"
+                    value={projectForm.description}
+                    onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
+                  />
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Paste scope text directly from ChatGPT. Relief Works will preserve headings, numbered steps, and bullet points in the workflow preview and quote scope.
+                  </p>
+                  <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope Preview</p>
+                    {projectForm.description.trim() ? (
+                      <ScopeRichText content={projectForm.description} className="mt-3" />
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Paste a project scope and the branded preview will appear here.
+                      </p>
+                    )}
+                  </div>
+                </div>
                 <Button
                   type="submit"
                   disabled={createProjectMutation.isPending || !clientsQuery.data?.length}
@@ -1406,12 +1496,14 @@ export default function AdminPortal() {
 
               <div className="space-y-3">
                 {projectsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading projects...</p>}
-                {!projectsQuery.isLoading && projectsQuery.data?.length === 0 && (
+                {!projectsQuery.isLoading && visibleProjects.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No projects yet. Create a client first, then add the project here.
+                    {hasActiveWorkflow
+                      ? "No projects are attached to the active workflow yet."
+                      : "No projects yet. Create a client first, then add the project here."}
                   </p>
                 )}
-                {projectsQuery.data?.map((project) => (
+                {visibleProjects.map((project) => (
                   <div
                     key={project.id}
                     className={`rounded-2xl border p-4 ${
@@ -1454,9 +1546,9 @@ export default function AdminPortal() {
                       </div>
                     )}
                     {project.description && (
-                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                        {project.description}
-                      </p>
+                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <ScopeRichText content={project.description} />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1467,10 +1559,14 @@ export default function AdminPortal() {
                 {subscriptionEventsQuery.isLoading && (
                   <p className="text-sm text-muted-foreground">Loading lifecycle events...</p>
                 )}
-                {!subscriptionEventsQuery.isLoading && subscriptionEventsQuery.data?.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No lifecycle events yet.</p>
+                {!subscriptionEventsQuery.isLoading && visibleSubscriptionEvents.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {hasActiveWorkflow
+                      ? "No lifecycle events are attached to the active workflow yet."
+                      : "No lifecycle events yet."}
+                  </p>
                 )}
-                {subscriptionEventsQuery.data?.slice(0, 8).map((event) => (
+                {visibleSubscriptionEvents.slice(0, 8).map((event) => (
                   <div key={event.id} className="rounded-xl border border-border/50 bg-card/70 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium text-foreground">{event.subscriptionName} / {event.clientName}</p>
@@ -1534,23 +1630,28 @@ export default function AdminPortal() {
                 <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
                   <p className="text-sm font-medium text-foreground">Quote source</p>
                   {selectedProject ? (
-                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                      <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
-                      <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
-                      <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
-                      {selectedProject.billingModel === "retainer" && (
-                        <p>
-                          <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
-                        </p>
-                      )}
-                      {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
-                        <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
-                      )}
-                      {selectedProject.billingModel === "hybrid" && (
-                        <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
-                      )}
-                      <p><span className="text-foreground">Scope:</span> {getProjectQuoteScope(selectedProject)}</p>
-                    </div>
+                    <>
+                      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                        <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
+                        <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
+                        <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
+                        {selectedProject.billingModel === "retainer" && (
+                          <p>
+                            <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
+                          </p>
+                        )}
+                        {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
+                          <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
+                        )}
+                        {selectedProject.billingModel === "hybrid" && (
+                          <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
+                        )}
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
+                        <ScopeRichText content={getProjectQuoteScope(selectedProject)} className="mt-3" />
+                      </div>
+                    </>
                   ) : (
                     <p className="mt-2 text-sm text-muted-foreground">
                       Pick a project and the quote will pull through the client, scope, currency, and pricing automatically.
@@ -1598,12 +1699,14 @@ export default function AdminPortal() {
 
               <div className="space-y-3">
                 {quotesQuery.isLoading && <p className="text-sm text-muted-foreground">Loading quotes...</p>}
-                {!quotesQuery.isLoading && quotesQuery.data?.length === 0 && (
+                {!quotesQuery.isLoading && visibleQuotes.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No quotations yet. Create the first one above.
+                    {hasActiveWorkflow
+                      ? "No quotations are attached to the active workflow yet."
+                      : "No quotations yet. Create the first one above."}
                   </p>
                 )}
-                {quotesQuery.data?.map((quote) => (
+                {visibleQuotes.map((quote) => (
                   <div
                     key={quote.id}
                     className={`rounded-2xl border p-4 ${
@@ -1631,9 +1734,10 @@ export default function AdminPortal() {
                       </div>
                     </div>
                     {quote.scope && (
-                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                        {quote.scope}
-                      </p>
+                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
+                        <ScopeRichText content={quote.scope} className="mt-3" />
+                      </div>
                     )}
                     <div className="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                       {quote.expiresAt && <span>Expires {new Date(quote.expiresAt).toLocaleDateString()}</span>}
@@ -1806,12 +1910,14 @@ export default function AdminPortal() {
 
               <div className="space-y-3">
                 {invoicesQuery.isLoading && <p className="text-sm text-muted-foreground">Loading invoices...</p>}
-                {!invoicesQuery.isLoading && invoicesQuery.data?.length === 0 && (
+                {!invoicesQuery.isLoading && visibleInvoices.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No invoices yet. Create the first invoice above.
+                    {hasActiveWorkflow
+                      ? "No invoices are attached to the active workflow yet."
+                      : "No invoices yet. Create the first invoice above."}
                   </p>
                 )}
-                {invoicesQuery.data?.map((invoice) => (
+                {visibleInvoices.map((invoice) => (
                   <div key={invoice.id} className="rounded-2xl border border-border/50 bg-background/65 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
@@ -1966,12 +2072,14 @@ export default function AdminPortal() {
 
               <div className="space-y-3">
                 {subscriptionsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading subscriptions...</p>}
-                {!subscriptionsQuery.isLoading && subscriptionsQuery.data?.length === 0 && (
+                {!subscriptionsQuery.isLoading && visibleSubscriptions.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    No subscriptions yet. Create the first recurring retainer above.
+                    {hasActiveWorkflow
+                      ? "No subscriptions are attached to the active workflow yet."
+                      : "No subscriptions yet. Create the first recurring retainer above."}
                   </p>
                 )}
-                {subscriptionsQuery.data?.map((subscription) => (
+                {visibleSubscriptions.map((subscription) => (
                   <div key={subscription.id} className="rounded-2xl border border-border/50 bg-background/65 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
