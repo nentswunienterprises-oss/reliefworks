@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
 import { api } from "@shared/routes";
+import { ScopeRichText } from "@/components/ScopeRichText";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -68,8 +69,6 @@ export default function QuoteApproval() {
   return (
     <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
       <main className="mx-auto max-w-3xl space-y-6">
-        <Badge variant="outline" className="border-primary/30 text-primary">Relief Works Quote Approval</Badge>
-
         <Card className="border-border/50 bg-card/90">
           <CardHeader>
             <CardTitle className="font-display text-4xl text-primary">Review Your Quote</CardTitle>
@@ -93,7 +92,12 @@ export default function QuoteApproval() {
                   {quoteQuery.data.scope && (
                     <>
                       <p className="text-sm text-muted-foreground">Scope</p>
-                      <p className="text-foreground leading-relaxed">{quoteQuery.data.scope}</p>
+                      <div className="rounded-2xl border border-border/50 bg-card/70 p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary">
+                          Relief Works Scope
+                        </p>
+                        <ScopeRichText content={quoteQuery.data.scope} className="mt-3" />
+                      </div>
                     </>
                   )}
                 </div>
