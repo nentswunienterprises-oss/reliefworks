@@ -62,6 +62,9 @@ export interface AdminQuoteRecord {
   subtotal: string;
   taxAmount: string;
   totalAmount: string;
+  paymentTermsType: string;
+  depositPercentage: number | null;
+  paymentTermsNote: string | null;
   approvalToken: string | null;
   approvedAt: Date | null;
   expiresAt: Date | null;
@@ -83,6 +86,9 @@ export interface AdminInvoiceRecord {
   subtotal: string;
   taxAmount: string;
   totalAmount: string;
+  paymentTermsType: string;
+  depositPercentage: number | null;
+  paymentTermsNote: string | null;
   amountPaid: string;
   balanceDue: string;
   dueAt: Date | null;
@@ -175,7 +181,7 @@ export interface IStorage {
       providerPaymentId?: string;
       amountGross?: string;
     },
-  ): Promise<AdminInvoiceRecord | null>;
+  ): Promise<{ invoice: AdminInvoiceRecord; statusChanged: boolean } | null>;
   reconcileSubscriptionFromPayfast(input: {
     providerSubscriptionId: string;
     status: SubscriptionStatus;
@@ -334,6 +340,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: quotes.subtotal,
         taxAmount: quotes.taxAmount,
         totalAmount: quotes.totalAmount,
+        paymentTermsType: quotes.paymentTermsType,
+        depositPercentage: quotes.depositPercentage,
+        paymentTermsNote: quotes.paymentTermsNote,
         approvalToken: quotes.approvalToken,
         approvedAt: quotes.approvedAt,
         expiresAt: quotes.expiresAt,
@@ -362,6 +371,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: quotes.subtotal,
         taxAmount: quotes.taxAmount,
         totalAmount: quotes.totalAmount,
+        paymentTermsType: quotes.paymentTermsType,
+        depositPercentage: quotes.depositPercentage,
+        paymentTermsNote: quotes.paymentTermsNote,
         approvalToken: quotes.approvalToken,
         approvedAt: quotes.approvedAt,
         expiresAt: quotes.expiresAt,
@@ -392,6 +404,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: quotes.subtotal,
         taxAmount: quotes.taxAmount,
         totalAmount: quotes.totalAmount,
+        paymentTermsType: quotes.paymentTermsType,
+        depositPercentage: quotes.depositPercentage,
+        paymentTermsNote: quotes.paymentTermsNote,
         approvalToken: quotes.approvalToken,
         approvedAt: quotes.approvedAt,
         expiresAt: quotes.expiresAt,
@@ -445,6 +460,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: quotes.subtotal,
         taxAmount: quotes.taxAmount,
         totalAmount: quotes.totalAmount,
+        paymentTermsType: quotes.paymentTermsType,
+        depositPercentage: quotes.depositPercentage,
+        paymentTermsNote: quotes.paymentTermsNote,
         approvalToken: quotes.approvalToken,
         approvedAt: quotes.approvedAt,
         expiresAt: quotes.expiresAt,
@@ -475,6 +493,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: invoices.subtotal,
         taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
+        paymentTermsType: invoices.paymentTermsType,
+        depositPercentage: invoices.depositPercentage,
+        paymentTermsNote: invoices.paymentTermsNote,
         amountPaid: invoices.amountPaid,
         balanceDue: invoices.balanceDue,
         dueAt: invoices.dueAt,
@@ -508,6 +529,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: invoices.subtotal,
         taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
+        paymentTermsType: invoices.paymentTermsType,
+        depositPercentage: invoices.depositPercentage,
+        paymentTermsNote: invoices.paymentTermsNote,
         amountPaid: invoices.amountPaid,
         balanceDue: invoices.balanceDue,
         dueAt: invoices.dueAt,
@@ -547,6 +571,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: invoices.subtotal,
         taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
+        paymentTermsType: invoices.paymentTermsType,
+        depositPercentage: invoices.depositPercentage,
+        paymentTermsNote: invoices.paymentTermsNote,
         amountPaid: invoices.amountPaid,
         balanceDue: invoices.balanceDue,
         dueAt: invoices.dueAt,
@@ -857,6 +884,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: invoices.subtotal,
         taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
+        paymentTermsType: invoices.paymentTermsType,
+        depositPercentage: invoices.depositPercentage,
+        paymentTermsNote: invoices.paymentTermsNote,
         amountPaid: invoices.amountPaid,
         balanceDue: invoices.balanceDue,
         dueAt: invoices.dueAt,
@@ -945,6 +975,9 @@ export class DatabaseStorage implements IStorage {
           subtotal: invoices.subtotal,
           taxAmount: invoices.taxAmount,
           totalAmount: invoices.totalAmount,
+          paymentTermsType: invoices.paymentTermsType,
+          depositPercentage: invoices.depositPercentage,
+          paymentTermsNote: invoices.paymentTermsNote,
           amountPaid: invoices.amountPaid,
           balanceDue: invoices.balanceDue,
           dueAt: invoices.dueAt,
@@ -994,6 +1027,9 @@ export class DatabaseStorage implements IStorage {
         subtotal: invoices.subtotal,
         taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
+        paymentTermsType: invoices.paymentTermsType,
+        depositPercentage: invoices.depositPercentage,
+        paymentTermsNote: invoices.paymentTermsNote,
         amountPaid: invoices.amountPaid,
         balanceDue: invoices.balanceDue,
         dueAt: invoices.dueAt,

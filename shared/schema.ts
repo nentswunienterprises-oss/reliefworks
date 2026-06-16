@@ -22,6 +22,7 @@ export const invoiceStatusOptions = ["draft", "sent", "pending_payment", "paid",
 export const subscriptionStatusOptions = ["pending", "active", "paused", "cancelled", "failed"] as const;
 export const subscriptionIntervalOptions = ["month", "year"] as const;
 export const paymentProviderOptions = ["payfast"] as const;
+export const paymentTermsTypeOptions = ["full_upfront", "split_50_50", "milestone", "retainer", "custom"] as const;
 
 export const pressureTypeSchema = z.enum(pressureTypeOptions);
 export const clientStatusSchema = z.enum(clientStatusOptions);
@@ -34,6 +35,7 @@ export const invoiceStatusSchema = z.enum(invoiceStatusOptions);
 export const subscriptionStatusSchema = z.enum(subscriptionStatusOptions);
 export const subscriptionIntervalSchema = z.enum(subscriptionIntervalOptions);
 export const paymentProviderSchema = z.enum(paymentProviderOptions);
+export const paymentTermsTypeSchema = z.enum(paymentTermsTypeOptions);
 
 export const inquiries = pgTable("inquiries", {
   id: serial("id").primaryKey(),
@@ -103,6 +105,9 @@ export const quotes = pgTable("quotes", {
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
   taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  paymentTermsType: varchar("payment_terms_type", { length: 40 }).notNull().default("full_upfront"),
+  depositPercentage: integer("deposit_percentage"),
+  paymentTermsNote: text("payment_terms_note"),
   approvalToken: varchar("approval_token", { length: 120 }).unique(),
   approvedAt: timestamp("approved_at"),
   expiresAt: timestamp("expires_at"),
@@ -134,6 +139,9 @@ export const invoices = pgTable("invoices", {
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
   taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  paymentTermsType: varchar("payment_terms_type", { length: 40 }).notNull().default("full_upfront"),
+  depositPercentage: integer("deposit_percentage"),
+  paymentTermsNote: text("payment_terms_note"),
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
   balanceDue: numeric("balance_due", { precision: 12, scale: 2 }).notNull().default("0"),
   dueAt: timestamp("due_at"),
@@ -294,5 +302,6 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
 export type SubscriptionInterval = z.infer<typeof subscriptionIntervalSchema>;
 export type PaymentProvider = z.infer<typeof paymentProviderSchema>;
+export type PaymentTermsType = z.infer<typeof paymentTermsTypeSchema>;
 export type InsertSubscriptionStatusEvent = z.infer<typeof insertSubscriptionStatusEventSchema>;
 export type SubscriptionStatusEvent = typeof subscriptionStatusEvents.$inferSelect;

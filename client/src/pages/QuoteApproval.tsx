@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
+import { Footer } from "@/components/Footer";
+import { PaymentTermsSummary } from "@/components/PaymentTermsSummary";
 import { api } from "@shared/routes";
 import { ScopeRichText } from "@/components/ScopeRichText";
 import { Button } from "@/components/ui/button";
@@ -58,17 +60,20 @@ export default function QuoteApproval() {
 
   if (!match) {
     return (
-      <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
-        <div className="mx-auto max-w-3xl">
-          <p className="text-sm text-muted-foreground">Quote route not found.</p>
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="px-6 py-10 md:px-12">
+          <div className="mx-auto max-w-3xl">
+            <p className="text-sm text-muted-foreground">Quote route not found.</p>
+          </div>
         </div>
+        <Footer showNavigation={false} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
-      <main className="mx-auto max-w-3xl space-y-6">
+    <div className="min-h-screen bg-background text-foreground">
+      <main className="mx-auto max-w-3xl space-y-6 px-6 py-10 md:px-12">
         <Card className="border-border/50 bg-card/90">
           <CardHeader>
             <CardTitle className="font-display text-4xl text-primary">Review Your Quote</CardTitle>
@@ -109,6 +114,16 @@ export default function QuoteApproval() {
                   </p>
                 </div>
 
+                <div className="rounded-xl border border-border/60 bg-background/70 p-4">
+                  <p className="text-sm text-muted-foreground">Payment Terms</p>
+                  <PaymentTermsSummary
+                    className="mt-2"
+                    paymentTermsType={quoteQuery.data.paymentTermsType}
+                    depositPercentage={quoteQuery.data.depositPercentage}
+                    paymentTermsNote={quoteQuery.data.paymentTermsNote}
+                  />
+                </div>
+
                 <Button
                   className="w-full"
                   disabled={!canApprove || approveMutation.isPending}
@@ -121,13 +136,16 @@ export default function QuoteApproval() {
                   <p className="text-sm text-destructive">Approval failed. This quote might be expired.</p>
                 )}
                 {quoteQuery.data.status === "approved" && (
-                  <p className="text-sm text-primary">Quote approved successfully. Relief Works will continue with next steps.</p>
+                  <p className="text-sm text-primary">
+                    Quote approved successfully. An invoice has been sent to your email. Please check your inbox.
+                  </p>
                 )}
               </>
             )}
           </CardContent>
         </Card>
       </main>
+      <Footer showNavigation={false} />
     </div>
   );
 }

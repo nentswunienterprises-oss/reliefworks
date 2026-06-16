@@ -1,4 +1,6 @@
 import { useState } from "react";
+
+import { AdminWorkspace } from "@/components/admin/AdminWorkspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,18 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScopeRichText } from "@/components/ScopeRichText";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import type { AdminProject, AdminQuote } from "@shared/routes";
 import {
   useAdminClients,
   useAdminDashboardSummary,
@@ -28,55 +19,62 @@ import {
   useAdminLogout,
   useAdminProjects,
   useAdminQuotes,
+  useAdminSession,
   useAdminSubscriptionEvents,
   useAdminSubscriptions,
-  useAdminSession,
+  useConvertAdminQuote,
   useCreateAdminClient,
   useCreateAdminInvoice,
   useCreateAdminProject,
   useCreateAdminQuote,
   useCreateAdminSubscription,
   useUpdateAdminSubscription,
-  useConvertAdminQuote,
 } from "@/hooks/use-admin";
-import {
-  type BillingModel,
-  billingModelOptions,
-  type ClientStatus,
-  clientStatusOptions,
-  type SubscriptionInterval,
-  subscriptionIntervalOptions,
-  type SubscriptionStatus,
-  subscriptionStatusOptions,
-  type SupportedCurrency,
-  supportedCurrencyOptions,
+import { useToast } from "@/hooks/use-toast";
+import type { AdminProject, AdminQuote } from "@shared/routes";
+import type {
+  BillingModel,
+  ClientStatus,
+  PaymentTermsType,
+  SubscriptionInterval,
+  SubscriptionStatus,
+  SupportedCurrency,
 } from "@shared/schema";
-import {
-  Activity,
-  ArrowRightLeft,
-  BriefcaseBusiness,
-  CircleDollarSign,
-  FileSignature,
-  FileCheck2,
-  FileText,
-  LifeBuoy,
-  LogOut,
-  Mail,
-  Receipt,
-  Users,
-} from "lucide-react";
 
-const metricMeta = [
-  { key: "clients", label: "Clients", icon: Users },
-  { key: "projects", label: "Projects", icon: BriefcaseBusiness },
-  { key: "quotes", label: "Quotes", icon: FileCheck2 },
-  { key: "invoices", label: "Invoices", icon: FileText },
-  { key: "subscriptions", label: "Subscriptions", icon: LifeBuoy },
-  { key: "inquiries", label: "Inquiries", icon: Activity },
-] as const;
+function getDefaultPaymentTerms(project: AdminProject | null): {
+  paymentTermsType: PaymentTermsType;
+  depositPercentage: string;
+  paymentTermsNote: string;
+} {
+  if (!project) {
+    return {
+      paymentTermsType: "full_upfront",
+      depositPercentage: "100",
+      paymentTermsNote: "",
+    };
+  }
 
-function formatLabel(value: string) {
-  return value.replace(/_/g, " ");
+  if (project.billingModel === "retainer") {
+    return {
+      paymentTermsType: "retainer",
+      depositPercentage: "100",
+      paymentTermsNote: "Billed monthly in advance for the active service period.",
+    };
+  }
+
+  if (project.billingModel === "hybrid") {
+    return {
+      paymentTermsType: "split_50_50",
+      depositPercentage: "50",
+      paymentTermsNote: "50% upfront to begin, with the remaining balance due on completion.",
+    };
+  }
+
+  return {
+    paymentTermsType: "full_upfront",
+    depositPercentage: "100",
+    paymentTermsNote: "Full payment is due before implementation begins.",
+  };
 }
 
 export default function AdminPortal() {
@@ -91,6 +89,7 @@ export default function AdminPortal() {
   const convertQuoteMutation = useConvertAdminQuote();
   const createSubscriptionMutation = useCreateAdminSubscription();
   const updateSubscriptionMutation = useUpdateAdminSubscription();
+
   const [email, setEmail] = useState("admin@reliefworks.local");
   const [password, setPassword] = useState("change-me");
   const [clientForm, setClientForm] = useState<{
@@ -138,6 +137,9 @@ export default function AdminPortal() {
     recipientEmail: string;
     subtotal: string;
     taxAmount: string;
+    paymentTermsType: PaymentTermsType;
+    depositPercentage: string;
+    paymentTermsNote: string;
     expiresAt: string;
   }>({
     clientId: "",
@@ -148,6 +150,9 @@ export default function AdminPortal() {
     recipientEmail: "",
     subtotal: "",
     taxAmount: "0",
+    paymentTermsType: "full_upfront",
+    depositPercentage: "100",
+    paymentTermsNote: "",
     expiresAt: "",
   });
   const [invoiceForm, setInvoiceForm] = useState<{
@@ -157,6 +162,9 @@ export default function AdminPortal() {
     currency: SupportedCurrency;
     subtotal: string;
     taxAmount: string;
+    paymentTermsType: PaymentTermsType;
+    depositPercentage: string;
+    paymentTermsNote: string;
     dueAt: string;
     createPaymentLink: boolean;
   }>({
@@ -166,6 +174,9 @@ export default function AdminPortal() {
     currency: "ZAR",
     subtotal: "",
     taxAmount: "0",
+    paymentTermsType: "full_upfront",
+    depositPercentage: "100",
+    paymentTermsNote: "",
     dueAt: "",
     createPaymentLink: true,
   });
@@ -199,6 +210,7 @@ export default function AdminPortal() {
   const invoicesQuery = useAdminInvoices(isAuthenticated);
   const subscriptionsQuery = useAdminSubscriptions(isAuthenticated);
   const subscriptionEventsQuery = useAdminSubscriptionEvents(isAuthenticated);
+
   const clients = clientsQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
   const quotes = quotesQuery.data ?? [];
@@ -206,10 +218,12 @@ export default function AdminPortal() {
   const subscriptions = subscriptionsQuery.data ?? [];
   const subscriptionEvents = subscriptionEventsQuery.data ?? [];
 
-  const selectedClient = clients.find((client) => String(client.id) === workspaceClientId) ?? null;
-  const selectedProject = projects.find((project) => String(project.id) === workspaceProjectId) ?? null;
-  const selectedQuote = quotes.find((quote) => String(quote.id) === workspaceQuoteId) ?? null;
-  const hasActiveWorkflow = Boolean(workspaceClientId || workspaceProjectId || workspaceQuoteId);
+  const selectedClient =
+    clients.find((client) => String(client.id) === workspaceClientId) ?? null;
+  const selectedProject =
+    projects.find((project) => String(project.id) === workspaceProjectId) ?? null;
+  const selectedQuote =
+    quotes.find((quote) => String(quote.id) === workspaceQuoteId) ?? null;
 
   function getProjectEstimatedMonths(project: AdminProject | null) {
     return project?.estimatedRetainerMonths ?? null;
@@ -324,87 +338,6 @@ export default function AdminPortal() {
     }
   }
 
-  const workspaceProjects = workspaceClientId
-    ? projects.filter((project) => String(project.clientId) === workspaceClientId)
-    : projects;
-  const workspaceQuotes = quotes.filter((quote) => {
-    if (workspaceClientId && String(quote.clientId) !== workspaceClientId) {
-      return false;
-    }
-    if (workspaceProjectId && String(quote.projectId ?? "") !== workspaceProjectId) {
-      return false;
-    }
-    return true;
-  });
-  const workspaceInvoices = invoices.filter((invoice) => {
-    if (workspaceClientId && String(invoice.clientId) !== workspaceClientId) {
-      return false;
-    }
-    if (workspaceProjectId && String(invoice.projectId ?? "") !== workspaceProjectId) {
-      return false;
-    }
-    if (workspaceQuoteId && String(invoice.quoteId ?? "") !== workspaceQuoteId) {
-      return false;
-    }
-    return true;
-  });
-  const workspaceSubscriptions = subscriptions.filter((subscription) => {
-    if (workspaceClientId && String(subscription.clientId) !== workspaceClientId) {
-      return false;
-    }
-    if (workspaceProjectId && String(subscription.projectId ?? "") !== workspaceProjectId) {
-      return false;
-    }
-    return true;
-  });
-  const workspaceSubscriptionIds = new Set(workspaceSubscriptions.map((subscription) => subscription.id));
-  const workspaceSubscriptionEvents = subscriptionEvents.filter((event) =>
-    workspaceSubscriptionIds.has(event.subscriptionId),
-  );
-  const visibleProjects = hasActiveWorkflow ? workspaceProjects : projects;
-  const visibleQuotes = hasActiveWorkflow ? workspaceQuotes : quotes;
-  const visibleInvoices = hasActiveWorkflow ? workspaceInvoices : invoices;
-  const visibleSubscriptions = hasActiveWorkflow ? workspaceSubscriptions : subscriptions;
-  const visibleSubscriptionEvents = hasActiveWorkflow ? workspaceSubscriptionEvents : subscriptionEvents;
-
-  const quoteProjects = quoteForm.clientId
-    ? projects.filter((project) => String(project.clientId) === quoteForm.clientId)
-    : workspaceProjects;
-  const invoiceProjects = invoiceForm.clientId
-    ? projects.filter((project) => String(project.clientId) === invoiceForm.clientId)
-    : workspaceProjects;
-  const invoiceQuotes = quotes.filter((quote) => {
-    if (invoiceForm.clientId && String(quote.clientId) !== invoiceForm.clientId) {
-      return false;
-    }
-    if (invoiceForm.projectId && String(quote.projectId ?? "") !== invoiceForm.projectId) {
-      return false;
-    }
-    return true;
-  });
-  const subscriptionProjects = subscriptionForm.clientId
-    ? projects.filter((project) => String(project.clientId) === subscriptionForm.clientId)
-    : workspaceProjects;
-  const workspaceInvoiceCount = invoices.filter((invoice) => {
-    if (!selectedClient) {
-      return false;
-    }
-    if (invoice.clientId !== selectedClient.id) {
-      return false;
-    }
-    if (selectedProject && invoice.projectId !== selectedProject.id) {
-      return false;
-    }
-    return true;
-  }).length;
-  const nextWorkspaceAction = !selectedClient
-    ? "Start by creating or selecting a client. Everything downstream will follow that context."
-    : !selectedProject
-      ? "Capture the delivery record next so pricing, scope, and billing structure stay attached to the client."
-      : !selectedQuote
-        ? "Turn the project into a formal quote next so approval and invoice generation stay linked."
-        : "The workflow is connected. Move into invoice creation or create a maintenance subscription from this same context.";
-
   function applyClientWorkspace(clientId: string) {
     if (!clientId) {
       setWorkspaceClientId("");
@@ -416,12 +349,16 @@ export default function AdminPortal() {
     setWorkspaceClientId(clientId);
     setWorkspaceProjectId("");
     setWorkspaceQuoteId("");
+
     const client = clients.find((item) => String(item.id) === clientId);
+
     setProjectForm((current) => ({ ...current, clientId }));
     setQuoteForm((current) => ({
       ...current,
       clientId,
       projectId: "",
+      title: "",
+      scope: "",
       recipientEmail: client?.primaryContactEmail || current.recipientEmail,
     }));
     setInvoiceForm((current) => ({ ...current, clientId, projectId: "", quoteId: "" }));
@@ -432,8 +369,24 @@ export default function AdminPortal() {
     if (!projectId) {
       setWorkspaceProjectId("");
       setWorkspaceQuoteId("");
-      setQuoteForm((current) => ({ ...current, projectId: "", title: "", scope: "", subtotal: "" }));
-      setInvoiceForm((current) => ({ ...current, projectId: "", quoteId: "" }));
+      setQuoteForm((current) => ({
+        ...current,
+        projectId: "",
+        title: "",
+        scope: "",
+        subtotal: "",
+        paymentTermsType: "full_upfront",
+        depositPercentage: "100",
+        paymentTermsNote: "",
+      }));
+      setInvoiceForm((current) => ({
+        ...current,
+        projectId: "",
+        quoteId: "",
+        paymentTermsType: "full_upfront",
+        depositPercentage: "100",
+        paymentTermsNote: "",
+      }));
       setSubscriptionForm((current) => ({ ...current, projectId: "" }));
       return;
     }
@@ -445,6 +398,7 @@ export default function AdminPortal() {
 
     const clientId = String(project.clientId);
     const projectClient = clients.find((item) => item.id === project.clientId);
+    const defaultTerms = getDefaultPaymentTerms(project);
 
     setWorkspaceClientId(clientId);
     setWorkspaceProjectId(projectId);
@@ -459,6 +413,9 @@ export default function AdminPortal() {
       currency: current.currency === "ZAR" ? project.currency : current.currency,
       recipientEmail: projectClient?.primaryContactEmail || current.recipientEmail,
       subtotal: getProjectQuoteSubtotal(project),
+      paymentTermsType: defaultTerms.paymentTermsType,
+      depositPercentage: defaultTerms.depositPercentage,
+      paymentTermsNote: defaultTerms.paymentTermsNote,
     }));
     setInvoiceForm((current) => ({
       ...current,
@@ -467,6 +424,9 @@ export default function AdminPortal() {
       quoteId: "",
       currency: current.currency === "ZAR" ? project.currency : current.currency,
       subtotal: getProjectQuoteSubtotal(project),
+      paymentTermsType: defaultTerms.paymentTermsType,
+      depositPercentage: defaultTerms.depositPercentage,
+      paymentTermsNote: defaultTerms.paymentTermsNote,
     }));
     setSubscriptionForm((current) => ({
       ...current,
@@ -501,6 +461,14 @@ export default function AdminPortal() {
       ...current,
       clientId,
       projectId,
+      title: quote.title,
+      scope: quote.scope || current.scope,
+      currency: quote.currency,
+      subtotal: quote.subtotal,
+      taxAmount: quote.taxAmount,
+      paymentTermsType: quote.paymentTermsType,
+      depositPercentage: quote.depositPercentage != null ? String(quote.depositPercentage) : "",
+      paymentTermsNote: quote.paymentTermsNote || "",
     }));
     setInvoiceForm((current) => ({
       ...current,
@@ -510,6 +478,9 @@ export default function AdminPortal() {
       currency: current.currency === "ZAR" ? quote.currency : current.currency,
       subtotal: current.subtotal || quote.subtotal,
       taxAmount: current.taxAmount === "0" ? quote.taxAmount : current.taxAmount,
+      paymentTermsType: quote.paymentTermsType,
+      depositPercentage: quote.depositPercentage != null ? String(quote.depositPercentage) : "",
+      paymentTermsNote: quote.paymentTermsNote || "",
     }));
   }
 
@@ -577,7 +548,9 @@ export default function AdminPortal() {
     }
   }
 
-  async function handleCreateClientFromInquiry(inquiry: NonNullable<typeof dashboardQuery.data>["recentInquiries"][number]) {
+  async function handleCreateClientFromInquiry(
+    inquiry: NonNullable<typeof dashboardQuery.data>["recentInquiries"][number],
+  ) {
     try {
       const client = await createClientMutation.mutateAsync({
         name: inquiry.name,
@@ -586,7 +559,9 @@ export default function AdminPortal() {
         primaryContactPhone: null,
         companyName: inquiry.company || null,
         status: "lead",
-        notes: [inquiry.role ? `Role: ${inquiry.role}` : null, inquiry.message].filter(Boolean).join("\n\n"),
+        notes: [inquiry.role ? `Role: ${inquiry.role}` : null, inquiry.message]
+          .filter(Boolean)
+          .join("\n\n"),
       });
 
       applyClientWorkspace(String(client.id));
@@ -597,7 +572,8 @@ export default function AdminPortal() {
     } catch (error) {
       toast({
         title: "Inquiry conversion failed",
-        description: error instanceof Error ? error.message : "Unable to create client from inquiry.",
+        description:
+          error instanceof Error ? error.message : "Unable to create client from inquiry.",
         variant: "destructive",
       });
     }
@@ -613,16 +589,22 @@ export default function AdminPortal() {
         description: projectForm.description || null,
         billingModel: projectForm.billingModel,
         currency: projectForm.currency,
-        oneOffAmount: projectForm.billingModel !== "retainer" && projectForm.oneOffAmount
-          ? Number(projectForm.oneOffAmount)
-          : null,
-        monthlyRetainerAmount: projectForm.billingModel !== "one_off" && projectForm.monthlyRetainerAmount
-          ? Number(projectForm.monthlyRetainerAmount)
-          : null,
-        estimatedRetainerMonths: projectForm.billingModel === "retainer"
-          ? (projectForm.estimatedRetainerMonths ? Number(projectForm.estimatedRetainerMonths) : null)
-          : null,
+        oneOffAmount:
+          projectForm.billingModel !== "retainer" && projectForm.oneOffAmount
+            ? Number(projectForm.oneOffAmount)
+            : null,
+        monthlyRetainerAmount:
+          projectForm.billingModel !== "one_off" && projectForm.monthlyRetainerAmount
+            ? Number(projectForm.monthlyRetainerAmount)
+            : null,
+        estimatedRetainerMonths:
+          projectForm.billingModel === "retainer"
+            ? projectForm.estimatedRetainerMonths
+              ? Number(projectForm.estimatedRetainerMonths)
+              : null
+            : null,
       });
+
       applyProjectWorkspace(String(project.id));
 
       setProjectForm({
@@ -633,7 +615,9 @@ export default function AdminPortal() {
         currency: project.currency,
         oneOffAmount: "",
         monthlyRetainerAmount: "",
-        estimatedRetainerMonths: project.estimatedRetainerMonths ? String(project.estimatedRetainerMonths) : "6",
+        estimatedRetainerMonths: project.estimatedRetainerMonths
+          ? String(project.estimatedRetainerMonths)
+          : "6",
       });
 
       toast({
@@ -661,25 +645,35 @@ export default function AdminPortal() {
       const quote = await createQuoteMutation.mutateAsync({
         clientId: project.clientId,
         projectId: project.id,
-        title: getProjectQuoteTitle(project),
-        scope: getProjectQuoteScope(project),
+        title: quoteForm.title?.trim() || getProjectQuoteTitle(project),
+        scope: quoteForm.scope?.trim() || getProjectQuoteScope(project),
         currency: project.currency,
         recipientEmail: quoteForm.recipientEmail?.trim() || undefined,
-        subtotal: Number(getProjectQuoteSubtotal(project) || "0"),
+        subtotal: Number(quoteForm.subtotal || getProjectQuoteSubtotal(project) || "0"),
         taxAmount: Number(quoteForm.taxAmount || "0"),
+        paymentTermsType: quoteForm.paymentTermsType,
+        depositPercentage: quoteForm.depositPercentage
+          ? Number(quoteForm.depositPercentage)
+          : null,
+        paymentTermsNote: quoteForm.paymentTermsNote?.trim() || null,
         expiresAt: quoteForm.expiresAt ? new Date(quoteForm.expiresAt) : null,
       });
+
       applyQuoteWorkspace(String(quote.id));
+      const defaultTerms = getDefaultPaymentTerms(project);
 
       setQuoteForm({
         clientId: String(quote.clientId),
         projectId: quote.projectId ? String(quote.projectId) : "",
-        title: "",
-        scope: "",
+        title: getProjectQuoteTitle(project),
+        scope: getProjectQuoteScope(project),
         currency: quote.currency,
         recipientEmail: "",
-        subtotal: "",
+        subtotal: getProjectQuoteSubtotal(project),
         taxAmount: "0",
+        paymentTermsType: defaultTerms.paymentTermsType,
+        depositPercentage: defaultTerms.depositPercentage,
+        paymentTermsNote: defaultTerms.paymentTermsNote,
         expiresAt: "",
       });
 
@@ -707,9 +701,21 @@ export default function AdminPortal() {
         currency: invoiceForm.currency,
         subtotal: Number(invoiceForm.subtotal || "0"),
         taxAmount: Number(invoiceForm.taxAmount || "0"),
+        paymentTermsType: invoiceForm.paymentTermsType,
+        depositPercentage: invoiceForm.depositPercentage
+          ? Number(invoiceForm.depositPercentage)
+          : null,
+        paymentTermsNote: invoiceForm.paymentTermsNote?.trim() || null,
         dueAt: invoiceForm.dueAt ? new Date(invoiceForm.dueAt) : null,
         createPaymentLink: invoiceForm.createPaymentLink,
       });
+
+      const project = projects.find(
+        (item) =>
+          String(item.id) ===
+          (invoice.projectId ? String(invoice.projectId) : invoiceForm.projectId),
+      );
+      const defaultTerms = getDefaultPaymentTerms(project ?? null);
 
       setInvoiceForm({
         clientId: String(invoice.clientId),
@@ -718,6 +724,9 @@ export default function AdminPortal() {
         currency: invoice.currency,
         subtotal: "",
         taxAmount: "0",
+        paymentTermsType: defaultTerms.paymentTermsType,
+        depositPercentage: defaultTerms.depositPercentage,
+        paymentTermsNote: defaultTerms.paymentTermsNote,
         dueAt: "",
         createPaymentLink: true,
       });
@@ -764,6 +773,7 @@ export default function AdminPortal() {
         amount: current.amount || result.project.monthlyRetainerAmount || "",
         name: current.name || `${result.project.name} Retainer`,
       }));
+
       toast({
         title: "Quote converted",
         description: `Project ${result.project.name} and invoice ${result.invoice.invoiceNumber} were created.`,
@@ -840,7 +850,7 @@ export default function AdminPortal() {
 
   if (sessionQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-background text-foreground px-6 py-10 md:px-12">
+      <div className="min-h-screen bg-background px-6 py-10 text-foreground md:px-12">
         <div className="mx-auto max-w-6xl">
           <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
             Loading admin console...
@@ -852,7 +862,7 @@ export default function AdminPortal() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background text-foreground overflow-hidden">
+      <div className="min-h-screen overflow-hidden bg-background text-foreground">
         <main className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-10 px-6 py-8 md:px-12 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <section className="relative overflow-hidden rounded-[2rem] border border-border/40 bg-card px-8 py-14 md:px-12">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(212,188,130,0.14),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.06),transparent_28%)]" />
@@ -865,8 +875,8 @@ export default function AdminPortal() {
                   A client system that feels controlled, premium, and exact.
                 </h1>
                 <p className="max-w-xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-                  This is the command layer for Relief Works: clients, quotations,
-                  invoicing, subscriptions, and project oversight from one place.
+                  This is the command layer for Relief Works: clients, quotations, invoicing,
+                  subscriptions, and project oversight from one place.
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -947,1200 +957,55 @@ export default function AdminPortal() {
     );
   }
 
-  const summary = dashboardQuery.data;
-
   return (
-    <div className="min-h-screen bg-background text-foreground px-6 py-8 md:px-12">
-      <main className="mx-auto max-w-7xl space-y-8">
-        {!hasActiveWorkflow && (
-          <>
-            <section className="grid gap-6 rounded-[2rem] border border-border/40 bg-card px-8 py-10 lg:grid-cols-[1.4fr_0.6fr] lg:items-end">
-              <div className="space-y-4">
-                <Badge variant="outline" className="border-primary/30 text-primary">
-                  Relief Works Admin
-                </Badge>
-                <h1 className="font-display text-4xl leading-tight text-primary md:text-6xl">
-                  The business now has a command center.
-                </h1>
-                <p className="max-w-3xl text-lg leading-relaxed text-muted-foreground">
-                  This is the first operational layer: secure access, live totals, and the
-                  intake pulse feeding the future CRM, quotation, invoicing, and maintenance system.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-background/70 p-5">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    Signed in as
-                  </p>
-                  <p className="mt-2 text-lg font-medium text-foreground">{session?.user?.name}</p>
-                  <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
-                </div>
-                <Button variant="outline" onClick={handleLogout} disabled={logoutMutation.isPending}>
-                  <LogOut className="h-4 w-4" />
-                  {logoutMutation.isPending ? "Closing..." : "Log Out"}
-                </Button>
-              </div>
-            </section>
-
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {metricMeta.map(({ key, label, icon: Icon }) => (
-                <Card key={key} className="border-border/50 bg-card/80">
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0">
-                    <div>
-                      <CardDescription>{label}</CardDescription>
-                      <CardTitle className="mt-3 font-display text-4xl text-primary">
-                        {dashboardQuery.isLoading ? "--" : summary?.totals[key] ?? 0}
-                      </CardTitle>
-                    </div>
-                    <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                  </CardHeader>
-                </Card>
-              ))}
-            </section>
-          </>
-        )}
-
-        <section className={hasActiveWorkflow ? "space-y-6" : "grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"}>
-          {!hasActiveWorkflow && (
-            <Card className="border-border/50 bg-card/85">
-              <CardHeader>
-                <CardTitle className="font-display text-3xl text-primary">
-                  Incoming inquiries
-                </CardTitle>
-                <CardDescription>
-                  The current lead pulse before those records are converted into clients and projects.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {dashboardQuery.isLoading && (
-                  <p className="text-sm text-muted-foreground">Loading inquiry activity...</p>
-                )}
-
-                {!dashboardQuery.isLoading && summary?.recentInquiries.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No inquiries yet. The intake layer is active and waiting.
-                  </p>
-                )}
-
-                {summary?.recentInquiries.map((inquiry) => (
-                  <div
-                    key={inquiry.id}
-                    className="rounded-2xl border border-border/50 bg-background/65 p-4"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{inquiry.name}</h3>
-                          <Badge variant="outline">{inquiry.pressureType}</Badge>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                          <span className="inline-flex items-center gap-2">
-                            <Mail className="h-4 w-4" />
-                            {inquiry.email}
-                          </span>
-                          {inquiry.company && <span>{inquiry.company}</span>}
-                          {inquiry.role && <span>{inquiry.role}</span>}
-                        </div>
-                      </div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        {inquiry.createdAt
-                          ? new Date(inquiry.createdAt).toLocaleDateString()
-                          : "No date"}
-                      </p>
-                    </div>
-                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                      {inquiry.message}
-                    </p>
-                    <div className="mt-4">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={createClientMutation.isPending}
-                        onClick={() => handleCreateClientFromInquiry(inquiry)}
-                      >
-                        Create Client From Inquiry
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Active workflow
-                  </CardTitle>
-                  <CardDescription>
-                    Keep one client context active so project, quote, invoice, and subscription work feels connected.
-                  </CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  {hasActiveWorkflow && (
-                    <Button type="button" variant="outline" onClick={() => applyClientWorkspace("")}>
-                      Exit workflow
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={handleLogout} disabled={logoutMutation.isPending}>
-                    <LogOut className="h-4 w-4" />
-                    {logoutMutation.isPending ? "Closing..." : "Log Out"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Client</p>
-                  <div className="mt-3">
-                    <Select value={workspaceClientId || "none"} onValueChange={(value) => applyClientWorkspace(value === "none" ? "" : value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a client context" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No client selected</SelectItem>
-                        {clients.map((client) => (
-                          <SelectItem key={client.id} value={String(client.id)}>
-                            {client.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {selectedClient
-                      ? `${selectedClient.name} is now the active account across the workflow.`
-                      : "Choose a client once and downstream forms will inherit that context."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Project</p>
-                  <div className="mt-3">
-                    <Select value={workspaceProjectId || "none"} onValueChange={(value) => applyProjectWorkspace(value === "none" ? "" : value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Focus a delivery record" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No project selected</SelectItem>
-                        {workspaceProjects.map((project) => (
-                          <SelectItem key={project.id} value={String(project.id)}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {selectedProject
-                      ? `${selectedProject.name} is driving the quote, invoice, and subscription defaults below.`
-                      : selectedClient
-                        ? `${workspaceProjects.length} project records are available for ${selectedClient.name}.`
-                        : "Select a client first to narrow the delivery records that matter."}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Quote</p>
-                  <div className="mt-3">
-                    <Select value={workspaceQuoteId || "none"} onValueChange={(value) => applyQuoteWorkspace(value === "none" ? "" : value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Focus a quote" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No quote selected</SelectItem>
-                        {workspaceQuotes.map((quote) => (
-                          <SelectItem key={quote.id} value={String(quote.id)}>
-                            {quote.quoteNumber}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {selectedQuote
-                      ? `${selectedQuote.quoteNumber} is active, so invoice creation can continue without re-entering the same links.`
-                      : selectedProject
-                        ? `${workspaceQuotes.length} quotes are tied to the current client and project context.`
-                        : "Once a project is in focus, the relevant quotes stay attached here too."}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                <p className="text-sm font-medium text-foreground">Next recommended move</p>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{nextWorkspaceAction}</p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!selectedClient}
-                    onClick={() => setProjectForm((current) => ({ ...current, clientId: workspaceClientId }))}
-                  >
-                    Prepare project form
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!selectedClient}
-                    onClick={() =>
-                      selectedProject
-                        ? applyProjectWorkspace(String(selectedProject.id))
-                        : setQuoteForm((current) => ({ ...current, clientId: workspaceClientId }))
-                    }
-                  >
-                    Prepare quote form
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!selectedClient}
-                    onClick={() =>
-                      selectedQuote
-                        ? applyQuoteWorkspace(String(selectedQuote.id))
-                        : selectedProject
-                          ? applyProjectWorkspace(String(selectedProject.id))
-                          : setInvoiceForm((current) => ({ ...current, clientId: workspaceClientId }))
-                    }
-                  >
-                    Prepare invoice form
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                {[
-                  {
-                    label: "1. Client captured",
-                    complete: Boolean(selectedClient),
-                    detail: selectedClient
-                      ? `${selectedClient.name} is the active account.`
-                      : "No active client yet.",
-                  },
-                  {
-                    label: "2. Delivery record attached",
-                    complete: Boolean(selectedProject),
-                    detail: selectedProject
-                      ? `${selectedProject.name} uses ${formatLabel(selectedProject.billingModel)} billing.`
-                      : selectedClient
-                        ? "Create or select the project next."
-                        : "Client context unlocks this step.",
-                  },
-                  {
-                    label: "3. Commercials connected",
-                    complete: Boolean(selectedQuote),
-                    detail: selectedQuote
-                      ? `${selectedQuote.quoteNumber} is ready for approval and billing.`
-                      : selectedProject
-                        ? "Create the quote next so invoices stay connected."
-                        : "Project context unlocks this step.",
-                  },
-                  {
-                    label: "4. Cash collection ready",
-                    complete: workspaceInvoiceCount > 0,
-                    detail: workspaceInvoiceCount > 0
-                      ? `${workspaceInvoiceCount} invoice record(s) already exist in the current workspace.`
-                      : "No invoice has been created in this active workflow yet.",
-                  },
-                ].map((step) => (
-                  <div key={step.label} className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-medium text-foreground">{step.label}</p>
-                      <Badge variant={step.complete ? "secondary" : "outline"}>
-                        {step.complete ? "Connected" : "Pending"}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className={`grid gap-6 ${hasActiveWorkflow ? "" : "xl:grid-cols-[1fr_1fr]"}`}>
-          {!hasActiveWorkflow && (
-            <Card className="border-border/50 bg-card/85">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <CardTitle className="font-display text-3xl text-primary">
-                      Clients
-                    </CardTitle>
-                    <CardDescription>
-                      Add and review the companies and contacts Relief Works manages.
-                    </CardDescription>
-                  </div>
-                  <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                    <Users className="h-5 w-5" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <form className="grid gap-4" onSubmit={handleCreateClient}>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Input
-                      placeholder="Client name"
-                      value={clientForm.name}
-                      onChange={(event) => setClientForm((current) => ({ ...current, name: event.target.value }))}
-                    />
-                    <Input
-                      placeholder="Company name"
-                      value={clientForm.companyName}
-                      onChange={(event) => setClientForm((current) => ({ ...current, companyName: event.target.value }))}
-                    />
-                    <Input
-                      placeholder="Primary contact"
-                      value={clientForm.primaryContactName}
-                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactName: event.target.value }))}
-                    />
-                    <Input
-                      placeholder="Primary email"
-                      type="email"
-                      value={clientForm.primaryContactEmail}
-                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactEmail: event.target.value }))}
-                    />
-                    <Input
-                      placeholder="Phone"
-                      value={clientForm.primaryContactPhone}
-                      onChange={(event) => setClientForm((current) => ({ ...current, primaryContactPhone: event.target.value }))}
-                    />
-                    <Select value={clientForm.status} onValueChange={(value) => setClientForm((current) => ({ ...current, status: value as ClientStatus }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Client status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientStatusOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Textarea
-                    placeholder="Operational notes, billing context, or delivery details"
-                    value={clientForm.notes}
-                    onChange={(event) => setClientForm((current) => ({ ...current, notes: event.target.value }))}
-                  />
-                  <Button type="submit" disabled={createClientMutation.isPending}>
-                    {createClientMutation.isPending ? "Creating client..." : "Create Client"}
-                  </Button>
-                </form>
-
-                <div className="space-y-3">
-                  {clientsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading clients...</p>}
-                  {!clientsQuery.isLoading && clients.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No clients yet. Add the first one above.</p>
-                  )}
-                  {clients.map((client) => (
-                    <div
-                      key={client.id}
-                      className={`rounded-2xl border p-4 ${
-                        selectedClient?.id === client.id
-                          ? "border-primary/50 bg-primary/5"
-                          : "border-border/50 bg-background/65"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-medium text-foreground">{client.name}</h3>
-                            <Badge variant="outline">{client.status}</Badge>
-                          </div>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {client.companyName || "No company specified"}
-                          </p>
-                          <p className="mt-3 text-sm text-muted-foreground">
-                            {client.primaryContactName || client.primaryContactEmail}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{client.primaryContactEmail}</p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={selectedClient?.id === client.id ? "secondary" : "outline"}
-                          onClick={() => applyClientWorkspace(String(client.id))}
-                        >
-                          {selectedClient?.id === client.id ? "In workflow" : "Focus"}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Projects
-                  </CardTitle>
-                  <CardDescription>
-                    Create the delivery record once. Lifecycle status will be inferred automatically from quotes and invoices.
-                  </CardDescription>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {selectedClient
-                      ? `Currently working inside ${selectedClient.name}. New projects will carry that client context forward.`
-                      : "Choose or create a client first so the rest of the delivery flow stays attached."}
-                  </p>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <ArrowRightLeft className="h-5 w-5" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form className="grid gap-4" onSubmit={handleCreateProject}>
-                <Select value={projectForm.clientId} onValueChange={(value) => applyClientWorkspace(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={String(client.id)}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input
-                    placeholder="Project name"
-                    value={projectForm.name}
-                    onChange={(event) => setProjectForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                  <Select value={projectForm.billingModel} onValueChange={(value) => setProjectForm((current) => ({ ...current, billingModel: value as BillingModel }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Billing model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {billingModelOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {formatLabel(option)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={projectForm.currency} onValueChange={(value) => setProjectForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supportedCurrencyOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {projectForm.billingModel !== "retainer" && (
-                    <Input
-                      placeholder={projectForm.billingModel === "hybrid" ? "Setup amount" : "Build amount"}
-                      value={projectForm.oneOffAmount}
-                      onChange={(event) => setProjectForm((current) => ({ ...current, oneOffAmount: event.target.value }))}
-                    />
-                  )}
-                  {projectForm.billingModel !== "one_off" && (
-                    <Input
-                      placeholder="Monthly maintenance amount"
-                      value={projectForm.monthlyRetainerAmount}
-                      onChange={(event) => setProjectForm((current) => ({ ...current, monthlyRetainerAmount: event.target.value }))}
-                    />
-                  )}
-                  {projectForm.billingModel === "retainer" && (
-                    <Input
-                      placeholder="Estimated months"
-                      value={projectForm.estimatedRetainerMonths}
-                      onChange={(event) => setProjectForm((current) => ({ ...current, estimatedRetainerMonths: event.target.value }))}
-                    />
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <Textarea
-                    className="min-h-[220px]"
-                    placeholder="Paste a ChatGPT scope with headings, bullets, and delivery framing"
-                    value={projectForm.description}
-                    onChange={(event) => setProjectForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Paste scope text directly from ChatGPT. Relief Works will preserve headings, numbered steps, and bullet points in the workflow preview and quote scope.
-                  </p>
-                  <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope Preview</p>
-                    {projectForm.description.trim() ? (
-                      <ScopeRichText content={projectForm.description} className="mt-3" />
-                    ) : (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        Paste a project scope and the branded preview will appear here.
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={createProjectMutation.isPending || !clientsQuery.data?.length}
-                >
-                  {createProjectMutation.isPending ? "Creating project..." : "Create Project"}
-                </Button>
-              </form>
-
-              <div className="space-y-3">
-                {projectsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading projects...</p>}
-                {!projectsQuery.isLoading && visibleProjects.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {hasActiveWorkflow
-                      ? "No projects are attached to the active workflow yet."
-                      : "No projects yet. Create a client first, then add the project here."}
-                  </p>
-                )}
-                {visibleProjects.map((project) => (
-                  <div
-                    key={project.id}
-                    className={`rounded-2xl border p-4 ${
-                      selectedProject?.id === project.id
-                        ? "border-primary/50 bg-primary/5"
-                        : "border-border/50 bg-background/65"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{project.name}</h3>
-                          <Badge variant="outline">{project.lifecycleStatus}</Badge>
-                          <Badge variant="secondary">{formatLabel(project.billingModel)}</Badge>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{project.clientName}</p>
-                      </div>
-                      <div className="rounded-full border border-border/50 bg-background/75 px-3 py-1.5 text-sm text-primary">
-                        <span className="inline-flex items-center gap-2">
-                          <CircleDollarSign className="h-4 w-4" />
-                          {project.currency}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={selectedProject?.id === project.id ? "secondary" : "outline"}
-                        onClick={() => applyProjectWorkspace(String(project.id))}
-                      >
-                        {selectedProject?.id === project.id ? "In workflow" : "Focus"}
-                      </Button>
-                    </div>
-                    {(project.oneOffAmount || project.monthlyRetainerAmount) && (
-                      <div className="mt-3 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                        {project.oneOffAmount && <span>Build: {project.oneOffAmount}</span>}
-                        {project.monthlyRetainerAmount && <span>Maintenance: {project.monthlyRetainerAmount}</span>}
-                        {project.estimatedRetainerMonths && <span>Estimated months: {project.estimatedRetainerMonths}</span>}
-                      </div>
-                    )}
-                    {project.description && (
-                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
-                        <ScopeRichText content={project.description} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-3 rounded-2xl border border-border/50 bg-background/65 p-4">
-                <p className="text-sm font-medium text-foreground">Lifecycle timeline</p>
-                {subscriptionEventsQuery.isLoading && (
-                  <p className="text-sm text-muted-foreground">Loading lifecycle events...</p>
-                )}
-                {!subscriptionEventsQuery.isLoading && visibleSubscriptionEvents.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {hasActiveWorkflow
-                      ? "No lifecycle events are attached to the active workflow yet."
-                      : "No lifecycle events yet."}
-                  </p>
-                )}
-                {visibleSubscriptionEvents.slice(0, 8).map((event) => (
-                  <div key={event.id} className="rounded-xl border border-border/50 bg-card/70 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{event.subscriptionName} / {event.clientName}</p>
-                      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                        {new Date(event.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {event.fromStatus ? `${event.fromStatus} -> ${event.toStatus}` : `Set to ${event.toStatus}`} via {event.source}
-                    </p>
-                    {event.note && <p className="mt-1 text-xs text-muted-foreground">{event.note}</p>}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section>
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Quotations
-                  </CardTitle>
-                  <CardDescription>
-                    Create a quote from the linked project. Scope, pricing, and client context are inherited automatically.
-                  </CardDescription>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {selectedProject
-                      ? `Quote defaults are anchored to ${selectedProject.name}.`
-                      : selectedClient
-                        ? `Quotes will stay attached to ${selectedClient.name} once you choose a project or create one.`
-                        : "Pick a client context to stop reselecting the same account in every commercial step."}
-                  </p>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <FileSignature className="h-5 w-5" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form className="grid gap-4" onSubmit={handleCreateQuote}>
-                <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-                  <Select value={quoteForm.projectId || "none"} onValueChange={(value) => applyProjectWorkspace(value === "none" ? "" : value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Select project</SelectItem>
-                      {quoteProjects.map((project) => (
-                        <SelectItem key={project.id} value={String(project.id)}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                  <p className="text-sm font-medium text-foreground">Quote source</p>
-                  {selectedProject ? (
-                    <>
-                      <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                        <p><span className="text-foreground">Client:</span> {selectedProject.clientName}</p>
-                        <p><span className="text-foreground">Title:</span> {getProjectQuoteTitle(selectedProject)}</p>
-                        <p><span className="text-foreground">Billing:</span> {formatLabel(selectedProject.billingModel)}</p>
-                        {selectedProject.billingModel === "retainer" && (
-                          <p>
-                            <span className="text-foreground">Retainer math:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} x {selectedProject.estimatedRetainerMonths || 1} month{selectedProject.estimatedRetainerMonths === 1 ? "" : "s"}
-                          </p>
-                        )}
-                        {selectedProject.billingModel === "hybrid" && selectedProject.oneOffAmount && (
-                          <p><span className="text-foreground">Setup/build:</span> {selectedProject.currency} {selectedProject.oneOffAmount}</p>
-                        )}
-                        {selectedProject.billingModel === "hybrid" && (
-                          <p><span className="text-foreground">Maintenance:</span> {selectedProject.currency} {selectedProject.monthlyRetainerAmount || "0.00"} per month until cancelled</p>
-                        )}
-                      </div>
-                      <div className="mt-4 rounded-2xl border border-border/50 bg-card/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
-                        <ScopeRichText content={getProjectQuoteScope(selectedProject)} className="mt-3" />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Pick a project and the quote will pull through the client, scope, currency, and pricing automatically.
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-4">
-                  <Input
-                    placeholder="Recipient email"
-                    type="email"
-                    value={quoteForm.recipientEmail}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, recipientEmail: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Currency"
-                    value={selectedProject?.currency || quoteForm.currency}
-                    disabled
-                  />
-                  <Input
-                    placeholder="Subtotal"
-                    value={selectedProject ? getProjectQuoteSubtotal(selectedProject) : quoteForm.subtotal}
-                    disabled
-                  />
-                  <Input
-                    placeholder="Tax"
-                    value={quoteForm.taxAmount}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, taxAmount: event.target.value }))}
-                  />
-                  <Input
-                    type="date"
-                    placeholder="Expiry"
-                    value={quoteForm.expiresAt}
-                    onChange={(event) => setQuoteForm((current) => ({ ...current, expiresAt: event.target.value }))}
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={createQuoteMutation.isPending || !quoteForm.projectId}
-                >
-                  {createQuoteMutation.isPending ? "Creating quote..." : "Create Quote"}
-                </Button>
-              </form>
-
-              <div className="space-y-3">
-                {quotesQuery.isLoading && <p className="text-sm text-muted-foreground">Loading quotes...</p>}
-                {!quotesQuery.isLoading && visibleQuotes.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {hasActiveWorkflow
-                      ? "No quotations are attached to the active workflow yet."
-                      : "No quotations yet. Create the first one above."}
-                  </p>
-                )}
-                {visibleQuotes.map((quote) => (
-                  <div
-                    key={quote.id}
-                    className={`rounded-2xl border p-4 ${
-                      selectedQuote?.id === quote.id
-                        ? "border-primary/50 bg-primary/5"
-                        : "border-border/50 bg-background/65"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{quote.title}</h3>
-                          <Badge variant="outline">{quote.status}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{quote.quoteNumber}</p>
-                        <p className="text-sm text-muted-foreground">{quote.clientName}{quote.projectName ? ` / ${quote.projectName}` : ""}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-medium text-primary">
-                          {quote.currency} {quote.totalAmount}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Subtotal {quote.subtotal} / Tax {quote.taxAmount}
-                        </p>
-                      </div>
-                    </div>
-                    {quote.scope && (
-                      <div className="mt-3 rounded-2xl border border-border/50 bg-card/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-primary">Relief Works Scope</p>
-                        <ScopeRichText content={quote.scope} className="mt-3" />
-                      </div>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                      {quote.expiresAt && <span>Expires {new Date(quote.expiresAt).toLocaleDateString()}</span>}
-                      {quote.approvalToken && <span>Approval token ready</span>}
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <Button
-                        size="sm"
-                        variant={selectedQuote?.id === quote.id ? "secondary" : "outline"}
-                        onClick={() => applyQuoteWorkspace(String(quote.id))}
-                        type="button"
-                      >
-                        {selectedQuote?.id === quote.id ? "In workflow" : "Focus"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={quote.status !== "approved" || convertQuoteMutation.isPending}
-                        onClick={() => handleConvertQuote(quote.id)}
-                        type="button"
-                      >
-                        Convert to Project + Invoice
-                      </Button>
-                      {quote.approvalToken && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleCopyQuoteApprovalLink(quote)}
-                          type="button"
-                        >
-                          Copy Approval Link
-                        </Button>
-                      )}
-                      {quote.approvalToken && getQuoteApprovalHref(quote) && (
-                        <a
-                          className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                          href={getQuoteApprovalHref(quote) ?? "#"}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          Open Approval Page
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section>
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Invoices
-                  </CardTitle>
-                  <CardDescription>
-                    Create invoices and generate PayFast payment links that clients can pay directly.
-                  </CardDescription>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {selectedQuote
-                      ? `Invoice creation is preloaded from ${selectedQuote.quoteNumber}.`
-                      : selectedProject
-                        ? `Invoices can stay tied to ${selectedProject.name} without re-entering the client link.`
-                        : "Invoice creation becomes much faster once a project or quote is already active in the workspace."}
-                  </p>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <Receipt className="h-5 w-5" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form className="grid gap-4" onSubmit={handleCreateInvoice}>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <Select value={invoiceForm.clientId} onValueChange={(value) => applyClientWorkspace(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={String(client.id)}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={invoiceForm.projectId || "none"} onValueChange={(value) => applyProjectWorkspace(value === "none" ? "" : value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No linked project</SelectItem>
-                      {invoiceProjects.map((project) => (
-                        <SelectItem key={project.id} value={String(project.id)}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={invoiceForm.quoteId || "none"} onValueChange={(value) => applyQuoteWorkspace(value === "none" ? "" : value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional quote" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No linked quote</SelectItem>
-                      {invoiceQuotes.map((quote) => (
-                        <SelectItem key={quote.id} value={String(quote.id)}>
-                          {quote.quoteNumber}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-4">
-                  <Select value={invoiceForm.currency} onValueChange={(value) => setInvoiceForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supportedCurrencyOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Subtotal"
-                    value={invoiceForm.subtotal}
-                    onChange={(event) => setInvoiceForm((current) => ({ ...current, subtotal: event.target.value }))}
-                  />
-                  <Input
-                    placeholder="Tax"
-                    value={invoiceForm.taxAmount}
-                    onChange={(event) => setInvoiceForm((current) => ({ ...current, taxAmount: event.target.value }))}
-                  />
-                  <Input
-                    type="date"
-                    placeholder="Due date"
-                    value={invoiceForm.dueAt}
-                    onChange={(event) => setInvoiceForm((current) => ({ ...current, dueAt: event.target.value }))}
-                  />
-                </div>
-
-                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={invoiceForm.createPaymentLink}
-                    onChange={(event) =>
-                      setInvoiceForm((current) => ({ ...current, createPaymentLink: event.target.checked }))
-                    }
-                  />
-                  Generate PayFast payment link immediately
-                </label>
-
-                <Button
-                  type="submit"
-                  disabled={createInvoiceMutation.isPending || !clientsQuery.data?.length}
-                >
-                  {createInvoiceMutation.isPending ? "Creating invoice..." : "Create Invoice"}
-                </Button>
-              </form>
-
-              <div className="space-y-3">
-                {invoicesQuery.isLoading && <p className="text-sm text-muted-foreground">Loading invoices...</p>}
-                {!invoicesQuery.isLoading && visibleInvoices.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {hasActiveWorkflow
-                      ? "No invoices are attached to the active workflow yet."
-                      : "No invoices yet. Create the first invoice above."}
-                  </p>
-                )}
-                {visibleInvoices.map((invoice) => (
-                  <div key={invoice.id} className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{invoice.invoiceNumber}</h3>
-                          <Badge variant="outline">{invoice.status}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{invoice.clientName}</p>
-                        <p className="text-sm text-muted-foreground">{invoice.clientEmail}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-medium text-primary">
-                          {invoice.currency} {invoice.totalAmount}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Due {invoice.balanceDue} / Paid {invoice.amountPaid}
-                        </p>
-                      </div>
-                    </div>
-                    {invoice.paymentLink && (
-                      <a
-                        className="mt-3 inline-flex text-sm text-primary underline underline-offset-2"
-                        href={invoice.paymentLink}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open payment link
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section>
-          <Card className="border-border/50 bg-card/85">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="font-display text-3xl text-primary">
-                    Subscriptions
-                  </CardTitle>
-                  <CardDescription>
-                    Track recurring maintenance retainers and monthly billing state.
-                  </CardDescription>
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    {selectedProject
-                      ? `Retainer setup can inherit the active project ${selectedProject.name}.`
-                      : selectedClient
-                        ? `Select a project when relevant, but the client context is already locked to ${selectedClient.name}.`
-                        : "Maintenance subscriptions work best once the client and project context is already established above."}
-                  </p>
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 p-3 text-primary">
-                  <LifeBuoy className="h-5 w-5" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <form className="grid gap-4" onSubmit={handleCreateSubscription}>
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <Select value={subscriptionForm.clientId} onValueChange={(value) => applyClientWorkspace(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={String(client.id)}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={subscriptionForm.projectId || "none"} onValueChange={(value) => applyProjectWorkspace(value === "none" ? "" : value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Optional project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No linked project</SelectItem>
-                      {subscriptionProjects.map((project) => (
-                        <SelectItem key={project.id} value={String(project.id)}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Input
-                    placeholder="Subscription name"
-                    value={subscriptionForm.name}
-                    onChange={(event) => setSubscriptionForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-4">
-                  <Select value={subscriptionForm.status} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, status: value as SubscriptionStatus }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subscriptionStatusOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {formatLabel(option)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={subscriptionForm.currency} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supportedCurrencyOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Input
-                    placeholder="Amount"
-                    value={subscriptionForm.amount}
-                    onChange={(event) => setSubscriptionForm((current) => ({ ...current, amount: event.target.value }))}
-                  />
-
-                  <Select value={subscriptionForm.interval} onValueChange={(value) => setSubscriptionForm((current) => ({ ...current, interval: value as SubscriptionInterval }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Interval" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subscriptionIntervalOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {formatLabel(option)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={createSubscriptionMutation.isPending || !clientsQuery.data?.length}
-                >
-                  {createSubscriptionMutation.isPending ? "Creating subscription..." : "Create Subscription"}
-                </Button>
-              </form>
-
-              <div className="space-y-3">
-                {subscriptionsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading subscriptions...</p>}
-                {!subscriptionsQuery.isLoading && visibleSubscriptions.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    {hasActiveWorkflow
-                      ? "No subscriptions are attached to the active workflow yet."
-                      : "No subscriptions yet. Create the first recurring retainer above."}
-                  </p>
-                )}
-                {visibleSubscriptions.map((subscription) => (
-                  <div key={subscription.id} className="rounded-2xl border border-border/50 bg-background/65 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-medium text-foreground">{subscription.name}</h3>
-                          <Badge variant="outline">{subscription.status}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{subscription.clientName}{subscription.projectName ? ` / ${subscription.projectName}` : ""}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-medium text-primary">
-                          {subscription.currency} {subscription.amount}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Every {subscription.interval}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={updateSubscriptionMutation.isPending || subscription.status === "active"}
-                        onClick={() => handleUpdateSubscription(subscription.id, { status: "active", cancelAtPeriodEnd: false })}
-                      >
-                        Activate
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={updateSubscriptionMutation.isPending || subscription.status === "paused"}
-                        onClick={() => handleUpdateSubscription(subscription.id, { status: "paused" })}
-                      >
-                        Pause
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={updateSubscriptionMutation.isPending || subscription.cancelAtPeriodEnd}
-                        onClick={() => handleUpdateSubscription(subscription.id, { cancelAtPeriodEnd: true })}
-                      >
-                        Cancel At Period End
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={updateSubscriptionMutation.isPending || !subscription.cancelAtPeriodEnd}
-                        onClick={() => handleUpdateSubscription(subscription.id, { cancelAtPeriodEnd: false })}
-                      >
-                        Reactivate
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      </main>
-    </div>
+    <AdminWorkspace
+      sessionName={session?.user?.name}
+      sessionEmail={session?.user?.email}
+      dashboard={dashboardQuery.data ?? undefined}
+      dashboardLoading={dashboardQuery.isLoading}
+      clients={clients}
+      projects={projects}
+      quotes={quotes}
+      invoices={invoices}
+      subscriptions={subscriptions}
+      subscriptionEvents={subscriptionEvents}
+      selectedClient={selectedClient}
+      selectedProject={selectedProject}
+      selectedQuote={selectedQuote}
+      workspaceClientId={workspaceClientId}
+      workspaceProjectId={workspaceProjectId}
+      workspaceQuoteId={workspaceQuoteId}
+      clientForm={clientForm}
+      setClientForm={setClientForm}
+      projectForm={projectForm}
+      setProjectForm={setProjectForm}
+      quoteForm={quoteForm}
+      setQuoteForm={setQuoteForm}
+      invoiceForm={invoiceForm}
+      setInvoiceForm={setInvoiceForm}
+      subscriptionForm={subscriptionForm}
+      setSubscriptionForm={setSubscriptionForm}
+      createClientPending={createClientMutation.isPending}
+      createProjectPending={createProjectMutation.isPending}
+      createQuotePending={createQuoteMutation.isPending}
+      createInvoicePending={createInvoiceMutation.isPending}
+      createSubscriptionPending={createSubscriptionMutation.isPending}
+      convertQuotePending={convertQuoteMutation.isPending}
+      updateSubscriptionPending={updateSubscriptionMutation.isPending}
+      logoutPending={logoutMutation.isPending}
+      onSubmitClient={handleCreateClient}
+      onSubmitProject={handleCreateProject}
+      onSubmitQuote={handleCreateQuote}
+      onSubmitInvoice={handleCreateInvoice}
+      onSubmitSubscription={handleCreateSubscription}
+      onCreateClientFromInquiry={handleCreateClientFromInquiry}
+      onConvertQuote={handleConvertQuote}
+      onUpdateSubscription={handleUpdateSubscription}
+      onLogout={handleLogout}
+      onSelectClient={applyClientWorkspace}
+      onSelectProject={applyProjectWorkspace}
+      onSelectQuote={applyQuoteWorkspace}
+      onCopyQuoteApprovalLink={handleCopyQuoteApprovalLink}
+    />
   );
 }
