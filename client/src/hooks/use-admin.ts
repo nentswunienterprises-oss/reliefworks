@@ -248,7 +248,7 @@ export function useUpdateAdminSubscription() {
 export function useGenerateSubscriptionCheckoutLink() {
   return useMutation({
     mutationFn: async (subscriptionId: number) => {
-      const path = `/api/admin/subscriptions/${subscriptionId}/checkout-link`;
+      const path = `/api/admin/subscriptions/checkout-link?subscriptionId=${subscriptionId}`;
       const res = await apiRequest("POST", path, {});
       const data = await res.json();
       if (!res.ok) {
