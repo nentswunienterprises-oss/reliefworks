@@ -167,6 +167,14 @@ export function createPayfastSubscriptionUrl(
   config: PayfastConfig,
   input: CreatePayfastSubscriptionUrlInput,
 ): { paymentLink: string; reference: string } {
+  const sanitizedConfig = {
+    merchantId: sanitizePayfastValue(config.merchantId),
+    merchantKey: sanitizePayfastValue(config.merchantKey),
+    passphrase: sanitizePayfastValue(config.passphrase),
+    returnUrl: sanitizePayfastValue(config.returnUrl),
+    cancelUrl: sanitizePayfastValue(config.cancelUrl),
+    notifyUrl: sanitizePayfastValue(config.notifyUrl),
+  };
   const baseUrl = config.sandbox
     ? "https://sandbox.payfast.co.za"
     : "https://www.payfast.co.za";
@@ -180,32 +188,35 @@ export function createPayfastSubscriptionUrl(
   const billingDate = input.billingDate || defaultBillingDate;
 
   // Default to monthly billing on the current day of month
-  const cycleDay = input.cycleDay || String(today.getDate()).padStart(2, "0");
-  const frequency = input.frequency || "3"; // 3 = monthly
-  const cycles = input.cycles || "0"; // 0 = indefinite
+  const cycleDay = sanitizePayfastValue(input.cycleDay) || String(Math.min(today.getDate(), 28)).padStart(2, "0");
+  const frequency = sanitizePayfastValue(input.frequency) || "3"; // 3 = monthly
+  const cycles = sanitizePayfastValue(input.cycles) || "0"; // 0 = indefinite
 
   const params: Record<string, string> = {
-    merchant_id: config.merchantId,
-    merchant_key: config.merchantKey,
-    return_url: config.returnUrl || "",
-    cancel_url: config.cancelUrl || "",
-    notify_url: config.notifyUrl || "",
+    merchant_id: sanitizedConfig.merchantId,
+    merchant_key: sanitizedConfig.merchantKey,
+    return_url: sanitizedConfig.returnUrl,
+    cancel_url: sanitizedConfig.cancelUrl,
+    notify_url: sanitizedConfig.notifyUrl,
     subscription: "1", // Enable recurring
-    m_payment_id: input.subscriptionToken,
-    amount: input.amount,
-    item_name: input.subscriptionName,
-    item_description: input.itemDescription || "",
-    email_address: input.customerEmail,
-    billing_date: billingDate,
+    subscription_type: "1",
+    m_payment_id: sanitizePayfastValue(input.subscriptionToken),
+    amount: sanitizePayfastValue(input.amount),
+    recurring_amount: sanitizePayfastValue(input.amount),
+    item_name: sanitizePayfastValue(input.subscriptionName),
+    item_description: sanitizePayfastValue(input.itemDescription),
+    email_address: sanitizePayfastValue(input.customerEmail),
+    billing_date: sanitizePayfastValue(billingDate),
     cycle_day: cycleDay,
     frequency: frequency,
     cycles: cycles,
   };
 
-  const signature = buildSignature(params, config.passphrase);
+  const signature = buildSignature(params, sanitizedConfig.passphrase);
   const query = Object.entries(params)
     .filter(([, value]) => value !== "")
-    .map(([key, value]) => `${key}=${encodeValue(value)}`)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${encodeValue(sanitizePayfastValue(value))}`)
     .join("&");
 
   return {
