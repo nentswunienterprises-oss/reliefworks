@@ -42,8 +42,11 @@ function sanitizePayfastValue(value: string | undefined): string {
   }
 
   // Deployment env values occasionally arrive with trailing CRLF/whitespace,
-  // which breaks the submitted query params and PayFast signature.
-  return value.replace(/[\r\n]+$/g, "").trimEnd();
+  // or escaped CRLF sequences, which break the submitted params/signature.
+  return value
+    .replace(/(?:\\r\\n|\\n|\\r)+$/g, "")
+    .replace(/[\r\n]+$/g, "")
+    .trimEnd();
 }
 
 function encodeValue(value: string): string {
@@ -198,6 +201,7 @@ export function createPayfastSubscriptionUrl(
     return_url: sanitizedConfig.returnUrl,
     cancel_url: sanitizedConfig.cancelUrl,
     notify_url: sanitizedConfig.notifyUrl,
+    payment_method: "cc",
     subscription_type: "1",
     m_payment_id: sanitizePayfastValue(input.subscriptionToken),
     amount: sanitizePayfastValue(input.amount),
