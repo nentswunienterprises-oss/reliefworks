@@ -65,7 +65,7 @@ export default function QuoteApproval() {
             <p className="text-sm text-muted-foreground">Quote route not found.</p>
           </div>
         </div>
-        <Footer />
+        <Footer showNavigation={false} />
       </div>
     );
   }
@@ -134,7 +134,7 @@ export default function QuoteApproval() {
           </CardContent>
         </Card>
       </main>
-      <Footer />
+      <Footer showNavigation={false} />
     </div>
   );
 }

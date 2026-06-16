@@ -1,6 +1,10 @@
 import { Link } from "wouter";
 
-export function Footer() {
+type FooterProps = {
+  showNavigation?: boolean;
+};
+
+export function Footer({ showNavigation = true }: FooterProps) {
   return (
     <footer className="py-24 px-6 border-t border-border/40 bg-background">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-end gap-12">
@@ -19,28 +23,30 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col items-start md:items-end gap-6">
-          <nav className="flex gap-8">
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              Manifesto
-            </Link>
-            <Link
-              href="/services"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              Relief
-            </Link>
-            <Link
-              href="/diagnosis"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              Diagnosis
-            </Link>
-          </nav>
-        </div>
+        {showNavigation && (
+          <div className="flex flex-col items-start md:items-end gap-6">
+            <nav className="flex gap-8">
+              <Link
+                href="/"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Manifesto
+              </Link>
+              <Link
+                href="/services"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Relief
+              </Link>
+              <Link
+                href="/diagnosis"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Diagnosis
+              </Link>
+            </nav>
+          </div>
+        )}
       </div>
     </footer>
   );
