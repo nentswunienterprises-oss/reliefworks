@@ -2,6 +2,7 @@ import type { Express, Request, RequestHandler } from "express";
 import { randomUUID } from "crypto";
 import {
   createPayfastPaymentUrl,
+  createPayfastSubscriptionUrl,
   isTrustedPayfastSource,
   verifyPayfastSignature,
 } from "./payfast.ts";
@@ -719,6 +720,90 @@ export function registerRoutes(app: Express) {
         });
       }
       throw err;
+    }
+  });
+
+  app.post("/api/admin/subscriptions/:subscriptionId/checkout-link", requireAdmin, async (req, res) => {
+    const parsedId = z.coerce.number().int().positive().safeParse(req.params.subscriptionId);
+    if (!parsedId.success) {
+      return res.status(400).json({ message: "Invalid subscription id", field: "subscriptionId" });
+    }
+
+    try {
+      const subscription = await storage.getSubscriptionById(parsedId.data);
+      if (!subscription) {
+        return res.status(404).json({ message: "Subscription not found", field: "subscriptionId" });
+      }
+
+      if (subscription.status !== "pending") {
+        return res.status(400).json({ 
+          message: "Only pending subscriptions can generate checkout links", 
+          field: "status" 
+        });
+      }
+
+      // Get client email
+      const clients = await storage.listClients();
+      const client = clients.find((c) => c.id === subscription.clientId);
+      const customerEmail = client?.primaryContactEmail || "";
+
+      if (!customerEmail) {
+        return res.status(400).json({ 
+          message: "Client does not have a primary contact email", 
+          field: "clientId" 
+        });
+      }
+
+      const isSandbox = process.env.PAYFAST_SANDBOX === "true";
+      const payfastMerchantId = isSandbox
+        ? process.env.PAYFAST_SANDBOX_MERCHANT_ID || process.env.PAYFAST_MERCHANT_ID
+        : process.env.PAYFAST_MERCHANT_ID;
+      const payfastMerchantKey = isSandbox
+        ? process.env.PAYFAST_SANDBOX_MERCHANT_KEY || process.env.PAYFAST_MERCHANT_KEY
+        : process.env.PAYFAST_MERCHANT_KEY;
+
+      if (!payfastMerchantId || !payfastMerchantKey) {
+        throw new Error("PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY are required");
+      }
+
+      const payfastResult = createPayfastSubscriptionUrl(
+        {
+          merchantId: payfastMerchantId,
+          merchantKey: payfastMerchantKey,
+          passphrase: isSandbox
+            ? process.env.PAYFAST_SANDBOX_PASSPHRASE || process.env.PAYFAST_PASSPHRASE
+            : process.env.PAYFAST_PASSPHRASE,
+          sandbox: isSandbox,
+          returnUrl: isSandbox
+            ? process.env.PAYFAST_SANDBOX_RETURN_URL || process.env.PAYFAST_RETURN_URL
+            : process.env.PAYFAST_RETURN_URL,
+          cancelUrl: isSandbox
+            ? process.env.PAYFAST_SANDBOX_CANCEL_URL || process.env.PAYFAST_CANCEL_URL
+            : process.env.PAYFAST_CANCEL_URL,
+          notifyUrl: isSandbox
+            ? process.env.PAYFAST_SANDBOX_SUBSCRIPTION_NOTIFY_URL || process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL
+            : process.env.PAYFAST_SUBSCRIPTION_NOTIFY_URL,
+        },
+        {
+          subscriptionName: subscription.name,
+          subscriptionToken: `sub_${subscription.id}_${Date.now()}`,
+          amount: subscription.amount,
+          customerEmail,
+          itemDescription: `Monthly subscription for ${subscription.projectName || subscription.clientName}`,
+          frequency: subscription.interval === "year" ? "6" : "3", // 3=monthly, 6=annual
+          cycles: "0", // indefinite
+        },
+      );
+
+      res.json({
+        paymentLink: payfastResult.paymentLink,
+        reference: payfastResult.reference,
+      });
+    } catch (err) {
+      console.error("Subscription checkout link generation failed:", err);
+      return res.status(500).json({ 
+        message: err instanceof Error ? err.message : "Failed to generate checkout link" 
+      });
     }
   });
 
