@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PaymentTermsSummary } from "@/components/PaymentTermsSummary";
 import { useToast } from "@/hooks/use-toast";
 import type { AdminProject, AdminQuote } from "@shared/routes";
 import {
@@ -36,6 +37,7 @@ import {
   useCreateAdminQuote,
   useCreateAdminSubscription,
   useUpdateAdminSubscription,
+  useGenerateSubscriptionCheckoutLink,
   useConvertAdminQuote,
 } from "@/hooks/use-admin";
 import {
@@ -49,6 +51,7 @@ import {
   subscriptionStatusOptions,
   type SupportedCurrency,
   supportedCurrencyOptions,
+  type PaymentTermsType,
 } from "@shared/schema";
 import {
   Activity,
@@ -74,8 +77,48 @@ const metricMeta = [
   { key: "inquiries", label: "Inquiries", icon: Activity },
 ] as const;
 
+const paymentTermsTypeOptions: PaymentTermsType[] = [
+  "full_upfront",
+  "split_50_50",
+  "milestone",
+  "retainer",
+  "custom",
+];
+
 function formatLabel(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function getDefaultPaymentTerms(project: AdminProject | null) {
+  if (!project) {
+    return {
+      paymentTermsType: "full_upfront" as PaymentTermsType,
+      depositPercentage: "100",
+      paymentTermsNote: "",
+    };
+  }
+
+  if (project.billingModel === "retainer") {
+    return {
+      paymentTermsType: "retainer" as PaymentTermsType,
+      depositPercentage: "100",
+      paymentTermsNote: "Billed monthly in advance for the active service period.",
+    };
+  }
+
+  if (project.billingModel === "hybrid") {
+    return {
+      paymentTermsType: "split_50_50" as PaymentTermsType,
+      depositPercentage: "50",
+      paymentTermsNote: "50% upfront to begin, with the remaining balance due on completion.",
+    };
+  }
+
+  return {
+    paymentTermsType: "full_upfront" as PaymentTermsType,
+    depositPercentage: "100",
+    paymentTermsNote: "Full payment is due before implementation begins.",
+  };
 }
 
 export default function AdminPortal() {
@@ -90,6 +133,7 @@ export default function AdminPortal() {
   const convertQuoteMutation = useConvertAdminQuote();
   const createSubscriptionMutation = useCreateAdminSubscription();
   const updateSubscriptionMutation = useUpdateAdminSubscription();
+  const generateCheckoutLinkMutation = useGenerateSubscriptionCheckoutLink();
   const [email, setEmail] = useState("admin@reliefworks.local");
   const [password, setPassword] = useState("change-me");
   const [clientForm, setClientForm] = useState<{
@@ -137,6 +181,9 @@ export default function AdminPortal() {
     recipientEmail: string;
     subtotal: string;
     taxAmount: string;
+    paymentTermsType: PaymentTermsType;
+    depositPercentage: string;
+    paymentTermsNote: string;
     expiresAt: string;
   }>({
     clientId: "",
@@ -147,6 +194,9 @@ export default function AdminPortal() {
     recipientEmail: "",
     subtotal: "",
     taxAmount: "0",
+    paymentTermsType: "full_upfront",
+    depositPercentage: "100",
+    paymentTermsNote: "",
     expiresAt: "",
   });
   const [invoiceForm, setInvoiceForm] = useState<{
@@ -208,6 +258,9 @@ export default function AdminPortal() {
   const selectedClient = clients.find((client) => String(client.id) === workspaceClientId) ?? null;
   const selectedProject = projects.find((project) => String(project.id) === workspaceProjectId) ?? null;
   const selectedQuote = quotes.find((quote) => String(quote.id) === workspaceQuoteId) ?? null;
+  const selectedInvoiceQuote = invoiceForm.quoteId
+    ? quotes.find((quote) => String(quote.id) === invoiceForm.quoteId) ?? null
+    : null;
   const hasActiveWorkflow = Boolean(workspaceClientId || workspaceProjectId || workspaceQuoteId);
 
   function getProjectEstimatedMonths(project: AdminProject | null) {
@@ -432,6 +485,8 @@ export default function AdminPortal() {
     setWorkspaceProjectId(projectId);
     setWorkspaceQuoteId("");
     setProjectForm((current) => ({ ...current, clientId }));
+    const defaultTerms = getDefaultPaymentTerms(project);
+
     setQuoteForm((current) => ({
       ...current,
       clientId,
@@ -441,6 +496,9 @@ export default function AdminPortal() {
       currency: current.currency === "ZAR" ? project.currency : current.currency,
       recipientEmail: projectClient?.primaryContactEmail || current.recipientEmail,
       subtotal: getProjectQuoteSubtotal(project),
+      paymentTermsType: defaultTerms.paymentTermsType,
+      depositPercentage: defaultTerms.depositPercentage,
+      paymentTermsNote: defaultTerms.paymentTermsNote,
     }));
     setInvoiceForm((current) => ({
       ...current,
@@ -489,9 +547,9 @@ export default function AdminPortal() {
       clientId,
       projectId,
       quoteId,
-      currency: current.currency === "ZAR" ? quote.currency : current.currency,
-      subtotal: current.subtotal || quote.subtotal,
-      taxAmount: current.taxAmount === "0" ? quote.taxAmount : current.taxAmount,
+      currency: quote.currency,
+      subtotal: String(quote.subtotal),
+      taxAmount: String(quote.taxAmount),
     }));
   }
 
@@ -649,6 +707,11 @@ export default function AdminPortal() {
         recipientEmail: quoteForm.recipientEmail?.trim() || undefined,
         subtotal: Number(getProjectQuoteSubtotal(project) || "0"),
         taxAmount: Number(quoteForm.taxAmount || "0"),
+        paymentTermsType: quoteForm.paymentTermsType,
+        depositPercentage: quoteForm.depositPercentage
+          ? Number(quoteForm.depositPercentage)
+          : null,
+        paymentTermsNote: quoteForm.paymentTermsNote?.trim() || null,
         expiresAt: quoteForm.expiresAt ? new Date(quoteForm.expiresAt) : null,
       });
       applyQuoteWorkspace(String(quote.id));
@@ -662,6 +725,9 @@ export default function AdminPortal() {
         recipientEmail: "",
         subtotal: "",
         taxAmount: "0",
+        paymentTermsType: quote.paymentTermsType,
+        depositPercentage: quote.depositPercentage != null ? String(quote.depositPercentage) : "",
+        paymentTermsNote: quote.paymentTermsNote || "",
         expiresAt: "",
       });
 
@@ -682,24 +748,32 @@ export default function AdminPortal() {
     event.preventDefault();
 
     try {
+      const selectedInvoiceQuote = invoiceForm.quoteId
+        ? quotes.find((item) => String(item.id) === invoiceForm.quoteId) ?? null
+        : null;
+
       const invoice = await createInvoiceMutation.mutateAsync({
-        clientId: Number(invoiceForm.clientId),
-        projectId: invoiceForm.projectId ? Number(invoiceForm.projectId) : null,
-        quoteId: invoiceForm.quoteId ? Number(invoiceForm.quoteId) : null,
-        currency: invoiceForm.currency,
-        subtotal: Number(invoiceForm.subtotal || "0"),
-        taxAmount: Number(invoiceForm.taxAmount || "0"),
+        clientId: Number(selectedInvoiceQuote?.clientId ?? invoiceForm.clientId),
+        projectId: selectedInvoiceQuote?.projectId ?? (invoiceForm.projectId ? Number(invoiceForm.projectId) : null),
+        quoteId: selectedInvoiceQuote ? selectedInvoiceQuote.id : null,
+        currency: selectedInvoiceQuote?.currency ?? invoiceForm.currency,
+        subtotal: Number(selectedInvoiceQuote?.subtotal ?? (invoiceForm.subtotal || "0")),
+        taxAmount: Number(selectedInvoiceQuote?.taxAmount ?? (invoiceForm.taxAmount || "0")),
         dueAt: invoiceForm.dueAt ? new Date(invoiceForm.dueAt) : null,
         createPaymentLink: invoiceForm.createPaymentLink,
       });
+
+      const createdInvoiceQuote = invoice.quoteId
+        ? quotes.find((item) => item.id === invoice.quoteId) ?? null
+        : null;
 
       setInvoiceForm({
         clientId: String(invoice.clientId),
         projectId: invoice.projectId ? String(invoice.projectId) : "",
         quoteId: invoice.quoteId ? String(invoice.quoteId) : "",
-        currency: invoice.currency,
-        subtotal: "",
-        taxAmount: "0",
+        currency: createdInvoiceQuote?.currency ?? invoice.currency,
+        subtotal: createdInvoiceQuote ? String(createdInvoiceQuote.subtotal) : String(invoice.subtotal),
+        taxAmount: createdInvoiceQuote ? String(createdInvoiceQuote.taxAmount) : String(invoice.taxAmount),
         dueAt: "",
         createPaymentLink: true,
       });
@@ -815,6 +889,24 @@ export default function AdminPortal() {
       toast({
         title: "Subscription update failed",
         description: error instanceof Error ? error.message : "Unable to update subscription.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleGenerateCheckoutLink(subscriptionId: number) {
+    try {
+      const result = await generateCheckoutLinkMutation.mutateAsync(subscriptionId);
+      // Copy to clipboard
+      await navigator.clipboard.writeText(result.paymentLink);
+      toast({
+        title: "Checkout link generated",
+        description: "Link copied to clipboard. Share with customer to complete payment.",
+      });
+    } catch (error) {
+      toast({
+        title: "Checkout link generation failed",
+        description: error instanceof Error ? error.message : "Unable to generate checkout link.",
         variant: "destructive",
       });
     }
@@ -1650,6 +1742,46 @@ export default function AdminPortal() {
                   />
                 </div>
 
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Select
+                    value={quoteForm.paymentTermsType}
+                    onValueChange={(value) => setQuoteForm((current) => ({
+                      ...current,
+                      paymentTermsType: value as PaymentTermsType,
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Payment terms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentTermsTypeOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {formatLabel(option)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="Deposit percentage"
+                    value={quoteForm.depositPercentage}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, depositPercentage: event.target.value }))}
+                    disabled={quoteForm.paymentTermsType === "retainer"}
+                  />
+                  <Input
+                    placeholder="Payment terms note"
+                    value={quoteForm.paymentTermsNote}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, paymentTermsNote: event.target.value }))}
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-border/50 bg-background/65 p-4">
+                  <PaymentTermsSummary
+                    paymentTermsType={quoteForm.paymentTermsType}
+                    depositPercentage={quoteForm.depositPercentage ? Number(quoteForm.depositPercentage) : null}
+                    paymentTermsNote={quoteForm.paymentTermsNote || null}
+                  />
+                </div>
+
                 <Button
                   type="submit"
                   disabled={createQuoteMutation.isPending || !quoteForm.projectId}
@@ -1819,7 +1951,11 @@ export default function AdminPortal() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4">
-                  <Select value={invoiceForm.currency} onValueChange={(value) => setInvoiceForm((current) => ({ ...current, currency: value as SupportedCurrency }))}>
+                  <Select
+                    value={invoiceForm.currency}
+                    onValueChange={(value) => setInvoiceForm((current) => ({ ...current, currency: value as SupportedCurrency }))}
+                    disabled={Boolean(invoiceForm.quoteId)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Currency" />
                     </SelectTrigger>
@@ -1834,11 +1970,13 @@ export default function AdminPortal() {
                   <Input
                     placeholder="Subtotal"
                     value={invoiceForm.subtotal}
+                    disabled={Boolean(invoiceForm.quoteId)}
                     onChange={(event) => setInvoiceForm((current) => ({ ...current, subtotal: event.target.value }))}
                   />
                   <Input
                     placeholder="Tax"
                     value={invoiceForm.taxAmount}
+                    disabled={Boolean(invoiceForm.quoteId)}
                     onChange={(event) => setInvoiceForm((current) => ({ ...current, taxAmount: event.target.value }))}
                   />
                   <Input
@@ -2057,6 +2195,17 @@ export default function AdminPortal() {
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
+                      {subscription.status === "pending" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          disabled={generateCheckoutLinkMutation.isPending}
+                          onClick={() => handleGenerateCheckoutLink(subscription.id)}
+                        >
+                          {generateCheckoutLinkMutation.isPending ? "Generating link..." : "Generate Checkout Link"}
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         size="sm"

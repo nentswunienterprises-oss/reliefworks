@@ -244,3 +244,17 @@ export function useUpdateAdminSubscription() {
     },
   });
 }
+
+export function useGenerateSubscriptionCheckoutLink() {
+  return useMutation({
+    mutationFn: async (subscriptionId: number) => {
+      const path = `/api/admin/subscriptions/${subscriptionId}/checkout-link`;
+      const res = await apiRequest("POST", path, {});
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to generate checkout link");
+      }
+      return data as { paymentLink: string; reference: string };
+    },
+  });
+}

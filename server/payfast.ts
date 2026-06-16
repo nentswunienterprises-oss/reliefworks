@@ -19,6 +19,18 @@ type CreatePayfastPaymentUrlInput = {
   customerEmail: string;
 };
 
+type CreatePayfastSubscriptionUrlInput = {
+  subscriptionName: string;
+  subscriptionToken: string;
+  amount: string;
+  customerEmail: string;
+  itemDescription?: string;
+  billingDate?: string; // YYYY-MM-DD, defaults to next month on same day
+  cycleDay?: string; // "01" to "28" (day of month to bill)
+  frequency?: "3" | "4" | "5" | "6"; // 3=monthly, 4=quarterly, 5=bi-annual, 6=annual
+  cycles?: string; // number of payments, "0" for indefinite
+};
+
 type VerifyPayfastSignatureInput = {
   payload: Record<string, string | undefined>;
   passphrase?: string;
@@ -127,5 +139,56 @@ export function createPayfastPaymentUrl(
   return {
     paymentLink: `${baseUrl}/eng/process?${query}&signature=${signature}`,
     reference: input.invoiceToken,
+  };
+}
+
+export function createPayfastSubscriptionUrl(
+  config: PayfastConfig,
+  input: CreatePayfastSubscriptionUrlInput,
+): { paymentLink: string; reference: string } {
+  const baseUrl = config.sandbox
+    ? "https://sandbox.payfast.co.za"
+    : "https://www.payfast.co.za";
+
+  // Calculate default billing date (next month, same day)
+  const today = new Date();
+  const billingDateObj = new Date(today);
+  billingDateObj.setMonth(billingDateObj.getMonth() + 1);
+
+  const defaultBillingDate = billingDateObj.toISOString().split("T")[0];
+  const billingDate = input.billingDate || defaultBillingDate;
+
+  // Default to monthly billing on the current day of month
+  const cycleDay = input.cycleDay || String(today.getDate()).padStart(2, "0");
+  const frequency = input.frequency || "3"; // 3 = monthly
+  const cycles = input.cycles || "0"; // 0 = indefinite
+
+  const params: Record<string, string> = {
+    merchant_id: config.merchantId,
+    merchant_key: config.merchantKey,
+    return_url: config.returnUrl || "",
+    cancel_url: config.cancelUrl || "",
+    notify_url: config.notifyUrl || "",
+    subscription: "1", // Enable recurring
+    m_payment_id: input.subscriptionToken,
+    amount: input.amount,
+    item_name: input.subscriptionName,
+    item_description: input.itemDescription || "",
+    email_address: input.customerEmail,
+    billing_date: billingDate,
+    cycle_day: cycleDay,
+    frequency: frequency,
+    cycles: cycles,
+  };
+
+  const signature = buildSignature(params, config.passphrase);
+  const query = Object.entries(params)
+    .filter(([, value]) => value !== "")
+    .map(([key, value]) => `${key}=${encodeValue(value)}`)
+    .join("&");
+
+  return {
+    paymentLink: `${baseUrl}/eng/process?${query}&signature=${signature}`,
+    reference: input.subscriptionToken,
   };
 }
