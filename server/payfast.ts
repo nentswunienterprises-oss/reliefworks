@@ -36,6 +36,40 @@ type VerifyPayfastSignatureInput = {
   passphrase?: string;
 };
 
+const PAYFAST_SIGNATURE_ORDER = [
+  "merchant_id",
+  "merchant_key",
+  "return_url",
+  "cancel_url",
+  "notify_url",
+  "name_first",
+  "name_last",
+  "email_address",
+  "cell_number",
+  "m_payment_id",
+  "amount",
+  "item_name",
+  "item_description",
+  "custom_int1",
+  "custom_int2",
+  "custom_int3",
+  "custom_int4",
+  "custom_int5",
+  "custom_str1",
+  "custom_str2",
+  "custom_str3",
+  "custom_str4",
+  "custom_str5",
+  "email_confirmation",
+  "confirmation_address",
+  "payment_method",
+  "subscription_type",
+  "billing_date",
+  "recurring_amount",
+  "frequency",
+  "cycles",
+] as const;
+
 function sanitizePayfastValue(value: string | undefined): string {
   if (!value) {
     return "";
@@ -53,17 +87,40 @@ function encodeValue(value: string): string {
   return encodeURIComponent(value).replace(/%20/g, "+");
 }
 
-function buildSignature(baseParams: Record<string, string>, passphrase?: string): string {
-  const query = Object.entries(baseParams)
-    .filter(([, value]) => value !== "")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${encodeValue(sanitizePayfastValue(value))}`)
-    .join("&");
+function buildOrderedQuery(baseParams: Record<string, string>, includePassphrase?: string): string {
+  const orderedKeys = new Set<string>(PAYFAST_SIGNATURE_ORDER);
+  const pairs: Array<[string, string]> = [];
 
+  for (const key of PAYFAST_SIGNATURE_ORDER) {
+    const value = sanitizePayfastValue(baseParams[key]);
+    if (value !== "") {
+      pairs.push([key, value]);
+    }
+  }
+
+  for (const key of Object.keys(baseParams).sort((a, b) => a.localeCompare(b))) {
+    if (orderedKeys.has(key)) {
+      continue;
+    }
+
+    const value = sanitizePayfastValue(baseParams[key]);
+    if (value !== "") {
+      pairs.push([key, value]);
+    }
+  }
+
+  if (includePassphrase) {
+    pairs.push(["passphrase", includePassphrase]);
+  }
+
+  return pairs
+    .map(([key, value]) => `${key}=${encodeValue(value)}`)
+    .join("&");
+}
+
+function buildSignature(baseParams: Record<string, string>, passphrase?: string): string {
   const sanitizedPassphrase = sanitizePayfastValue(passphrase);
-  const signatureSeed = sanitizedPassphrase
-    ? `${query}&passphrase=${encodeValue(sanitizedPassphrase)}`
-    : query;
+  const signatureSeed = buildOrderedQuery(baseParams, sanitizedPassphrase || undefined);
 
   return createHash("md5").update(signatureSeed).digest("hex");
 }
@@ -154,11 +211,7 @@ export function createPayfastPaymentUrl(
   };
 
   const signature = buildSignature(params, sanitizedConfig.passphrase);
-  const query = Object.entries(params)
-    .filter(([, value]) => value !== "")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${encodeValue(sanitizePayfastValue(value))}`)
-    .join("&");
+  const query = buildOrderedQuery(params);
 
   return {
     paymentLink: `${baseUrl}/eng/process?${query}&signature=${signature}`,
@@ -190,8 +243,6 @@ export function createPayfastSubscriptionUrl(
   const defaultBillingDate = billingDateObj.toISOString().split("T")[0];
   const billingDate = input.billingDate || defaultBillingDate;
 
-  // Default to monthly billing on the current day of month
-  const cycleDay = sanitizePayfastValue(input.cycleDay) || String(Math.min(today.getDate(), 28)).padStart(2, "0");
   const frequency = sanitizePayfastValue(input.frequency) || "3"; // 3 = monthly
   const cycles = sanitizePayfastValue(input.cycles) || "0"; // 0 = indefinite
 
@@ -210,17 +261,12 @@ export function createPayfastSubscriptionUrl(
     item_description: sanitizePayfastValue(input.itemDescription),
     email_address: sanitizePayfastValue(input.customerEmail),
     billing_date: sanitizePayfastValue(billingDate),
-    cycle_day: cycleDay,
     frequency: frequency,
     cycles: cycles,
   };
 
   const signature = buildSignature(params, sanitizedConfig.passphrase);
-  const query = Object.entries(params)
-    .filter(([, value]) => value !== "")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${encodeValue(sanitizePayfastValue(value))}`)
-    .join("&");
+  const query = buildOrderedQuery(params);
 
   return {
     paymentLink: `${baseUrl}/eng/process?${query}&signature=${signature}`,
