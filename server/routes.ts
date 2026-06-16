@@ -181,6 +181,23 @@ export function registerRoutes(app: Express) {
     }
   };
 
+  type InvoiceRecord = Awaited<ReturnType<typeof storage.getInvoiceByQuoteId>>;
+
+  const sendInvoicePaidReceipt = async (invoice: Exclude<InvoiceRecord, null>) => {
+    const amountPaid = invoice.amountPaid || invoice.totalAmount;
+    const balanceDue = invoice.balanceDue || "0.00";
+    const subject = `Payment received for invoice ${invoice.invoiceNumber}`;
+    const text = `Hello, we have received payment of ${invoice.currency} ${amountPaid} for invoice ${invoice.invoiceNumber}. Your remaining balance is ${invoice.currency} ${balanceDue}. Thank you for your payment.`;
+    const html = `<p>Hello,</p><p>We have received payment of <strong>${invoice.currency} ${amountPaid}</strong> for invoice <strong>${invoice.invoiceNumber}</strong>.</p><p>Your remaining balance is <strong>${invoice.currency} ${balanceDue}</strong>.</p><p>Thank you for your payment.</p>`;
+
+    await sendEmailSafely({
+      to: invoice.clientEmail,
+      subject,
+      text,
+      html,
+    });
+  };
+
   const toPublicQuote = (quote: Awaited<ReturnType<typeof storage.getQuoteById>>) => {
     if (!quote) {
       return null;
@@ -202,6 +219,11 @@ export function registerRoutes(app: Express) {
     };
   };
 
+  const isPayfastSandbox = process.env.PAYFAST_SANDBOX === "true";
+  const payfastPassphrase = isPayfastSandbox
+    ? process.env.PAYFAST_SANDBOX_PASSPHRASE || process.env.PAYFAST_PASSPHRASE
+    : process.env.PAYFAST_PASSPHRASE;
+
   const attachPayfastLinkToInvoice = async (
     invoice: Awaited<ReturnType<typeof storage.createInvoice>>,
     amount: string,
@@ -222,9 +244,7 @@ export function registerRoutes(app: Express) {
       {
         merchantId: payfastMerchantId,
         merchantKey: payfastMerchantKey,
-        passphrase: isSandbox
-          ? process.env.PAYFAST_SANDBOX_PASSPHRASE || process.env.PAYFAST_PASSPHRASE
-          : process.env.PAYFAST_PASSPHRASE,
+        passphrase: payfastPassphrase,
         sandbox: isSandbox,
         returnUrl: isSandbox
           ? process.env.PAYFAST_SANDBOX_RETURN_URL || process.env.PAYFAST_RETURN_URL
@@ -336,7 +356,7 @@ export function registerRoutes(app: Express) {
           acc[key] = typeof value === "string" ? value : undefined;
           return acc;
         }, {}),
-        passphrase: process.env.PAYFAST_PASSPHRASE,
+        passphrase: payfastPassphrase,
       });
 
       if (!signatureValid) {
@@ -357,6 +377,10 @@ export function registerRoutes(app: Express) {
 
       if (!reconciled) {
         return res.status(404).send("invoice not found");
+      }
+
+      if (reconciled.statusChanged && reconciled.invoice.status === "paid") {
+        await sendInvoicePaidReceipt(reconciled.invoice);
       }
 
       return res.status(200).send("ok");
@@ -382,7 +406,7 @@ export function registerRoutes(app: Express) {
           acc[key] = typeof value === "string" ? value : undefined;
           return acc;
         }, {}),
-        passphrase: process.env.PAYFAST_PASSPHRASE,
+        passphrase: payfastPassphrase,
       });
 
       if (!signatureValid) {

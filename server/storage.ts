@@ -883,7 +883,7 @@ export class DatabaseStorage implements IStorage {
       providerPaymentId?: string;
       amountGross?: string;
     },
-  ): Promise<AdminInvoiceRecord | null> {
+  ): Promise<{ invoice: AdminInvoiceRecord; statusChanged: boolean } | null> {
     const status = input.paymentStatus.toUpperCase();
 
     const existing = await db
@@ -921,6 +921,7 @@ export class DatabaseStorage implements IStorage {
       nextStatus = "cancelled";
     }
 
+    const statusChanged = nextStatus !== invoice.status;
     const isDuplicateReference =
       Boolean(input.providerPaymentId) &&
       Boolean(invoice.providerInvoiceId) &&
@@ -960,7 +961,9 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(projects, eq(invoices.projectId, projects.id))
         .where(eq(invoices.id, invoice.id));
 
-      return rows[0] ?? null;
+      return rows[0]
+        ? { invoice: rows[0], statusChanged: false }
+        : null;
     }
 
     await db
@@ -1007,7 +1010,9 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(projects, eq(invoices.projectId, projects.id))
       .where(eq(invoices.id, invoice.id));
 
-    return rows[0] ?? null;
+    return rows[0]
+      ? { invoice: rows[0], statusChanged }
+      : null;
   }
 }
 
