@@ -198,7 +198,6 @@ export function createPayfastSubscriptionUrl(
     return_url: sanitizedConfig.returnUrl,
     cancel_url: sanitizedConfig.cancelUrl,
     notify_url: sanitizedConfig.notifyUrl,
-    subscription: "1", // Enable recurring
     subscription_type: "1",
     m_payment_id: sanitizePayfastValue(input.subscriptionToken),
     amount: sanitizePayfastValue(input.amount),
