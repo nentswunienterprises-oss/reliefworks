@@ -206,6 +206,9 @@ export default function AdminPortal() {
     currency: SupportedCurrency;
     subtotal: string;
     taxAmount: string;
+    paymentTermsType: PaymentTermsType;
+    depositPercentage: string;
+    paymentTermsNote: string;
     dueAt: string;
     createPaymentLink: boolean;
   }>({
@@ -215,6 +218,9 @@ export default function AdminPortal() {
     currency: "ZAR",
     subtotal: "",
     taxAmount: "0",
+    paymentTermsType: "full_upfront",
+    depositPercentage: "100",
+    paymentTermsNote: "",
     dueAt: "",
     createPaymentLink: true,
   });
@@ -759,6 +765,13 @@ export default function AdminPortal() {
         currency: selectedInvoiceQuote?.currency ?? invoiceForm.currency,
         subtotal: Number(selectedInvoiceQuote?.subtotal ?? (invoiceForm.subtotal || "0")),
         taxAmount: Number(selectedInvoiceQuote?.taxAmount ?? (invoiceForm.taxAmount || "0")),
+        paymentTermsType: selectedInvoiceQuote?.paymentTermsType ?? invoiceForm.paymentTermsType,
+        depositPercentage: selectedInvoiceQuote
+          ? selectedInvoiceQuote.depositPercentage
+          : invoiceForm.depositPercentage
+            ? Number(invoiceForm.depositPercentage)
+            : null,
+        paymentTermsNote: selectedInvoiceQuote?.paymentTermsNote ?? (invoiceForm.paymentTermsNote?.trim() || null),
         dueAt: invoiceForm.dueAt ? new Date(invoiceForm.dueAt) : null,
         createPaymentLink: invoiceForm.createPaymentLink,
       });
@@ -774,6 +787,14 @@ export default function AdminPortal() {
         currency: createdInvoiceQuote?.currency ?? invoice.currency,
         subtotal: createdInvoiceQuote ? String(createdInvoiceQuote.subtotal) : String(invoice.subtotal),
         taxAmount: createdInvoiceQuote ? String(createdInvoiceQuote.taxAmount) : String(invoice.taxAmount),
+        paymentTermsType: createdInvoiceQuote?.paymentTermsType ?? invoice.paymentTermsType,
+        depositPercentage:
+          createdInvoiceQuote?.depositPercentage != null
+            ? String(createdInvoiceQuote.depositPercentage)
+            : invoice.depositPercentage != null
+              ? String(invoice.depositPercentage)
+              : "",
+        paymentTermsNote: createdInvoiceQuote?.paymentTermsNote ?? invoice.paymentTermsNote ?? "",
         dueAt: "",
         createPaymentLink: true,
       });

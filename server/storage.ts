@@ -1,4 +1,4 @@
-import { db } from "./db.ts";
+import { db, ensureCommercialSchemaCompatibility } from "./db.ts";
 import {
   asc,
   desc,
@@ -214,6 +214,10 @@ const projectEstimatedMonthsSql = sql<number | null>`case
 end`;
 
 export class DatabaseStorage implements IStorage {
+  private async ensureCommercialSchema() {
+    await ensureCommercialSchemaCompatibility();
+  }
+
   async createInquiry(insertInquiry: InsertInquiry): Promise<Inquiry> {
     const [inquiry] = await db.insert(inquiries).values(insertInquiry).returning();
     return inquiry;
@@ -325,6 +329,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listQuotes(): Promise<AdminQuoteRecord[]> {
+    await this.ensureCommercialSchema();
+
     return db
       .select({
         id: quotes.id,
@@ -356,6 +362,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getQuoteById(quoteId: number): Promise<AdminQuoteRecord | null> {
+    await this.ensureCommercialSchema();
+
     const rows = await db
       .select({
         id: quotes.id,
@@ -389,6 +397,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getQuoteByApprovalToken(approvalToken: string): Promise<AdminQuoteRecord | null> {
+    await this.ensureCommercialSchema();
+
     const rows = await db
       .select({
         id: quotes.id,
@@ -422,6 +432,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async approveQuoteByApprovalToken(approvalToken: string): Promise<AdminQuoteRecord | null> {
+    await this.ensureCommercialSchema();
+
     const existing = await this.getQuoteByApprovalToken(approvalToken);
 
     if (!existing) {
@@ -443,6 +455,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createQuote(insertQuote: InsertQuote): Promise<AdminQuoteRecord> {
+    await this.ensureCommercialSchema();
+
     const [quote] = await db.insert(quotes).values(insertQuote).returning();
 
     const rows = await db
@@ -478,6 +492,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listInvoices(): Promise<AdminInvoiceRecord[]> {
+    await this.ensureCommercialSchema();
+
     return db
       .select({
         id: invoices.id,
@@ -514,6 +530,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInvoiceByQuoteId(quoteId: number): Promise<AdminInvoiceRecord | null> {
+    await this.ensureCommercialSchema();
+
     const rows = await db
       .select({
         id: invoices.id,
@@ -554,6 +572,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvoice(insertInvoice: InsertInvoice): Promise<AdminInvoiceRecord> {
+    await this.ensureCommercialSchema();
+
     const [invoice] = await db.insert(invoices).values(insertInvoice).returning();
 
     const rows = await db
@@ -858,6 +878,8 @@ export class DatabaseStorage implements IStorage {
       status?: InvoiceStatus;
     },
   ): Promise<AdminInvoiceRecord> {
+    await this.ensureCommercialSchema();
+
     await db
       .update(invoices)
       .set({
@@ -914,6 +936,8 @@ export class DatabaseStorage implements IStorage {
       amountGross?: string;
     },
   ): Promise<{ invoice: AdminInvoiceRecord; statusChanged: boolean } | null> {
+    await this.ensureCommercialSchema();
+
     const status = input.paymentStatus.toUpperCase();
 
     const existing = await db

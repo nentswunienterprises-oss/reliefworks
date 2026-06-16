@@ -13,3 +13,41 @@ const client = postgres(process.env.DATABASE_URL, {
 });
 
 export const db = drizzle(client, { schema });
+
+let commercialSchemaReadyPromise: Promise<void> | null = null;
+
+export async function ensureCommercialSchemaCompatibility() {
+  if (!commercialSchemaReadyPromise) {
+    commercialSchemaReadyPromise = (async () => {
+      await client.unsafe(`
+        alter table quotes
+        add column if not exists payment_terms_type varchar(40) not null default 'full_upfront'
+      `);
+      await client.unsafe(`
+        alter table quotes
+        add column if not exists deposit_percentage integer
+      `);
+      await client.unsafe(`
+        alter table quotes
+        add column if not exists payment_terms_note text
+      `);
+      await client.unsafe(`
+        alter table invoices
+        add column if not exists payment_terms_type varchar(40) not null default 'full_upfront'
+      `);
+      await client.unsafe(`
+        alter table invoices
+        add column if not exists deposit_percentage integer
+      `);
+      await client.unsafe(`
+        alter table invoices
+        add column if not exists payment_terms_note text
+      `);
+    })().catch((error) => {
+      commercialSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await commercialSchemaReadyPromise;
+}
