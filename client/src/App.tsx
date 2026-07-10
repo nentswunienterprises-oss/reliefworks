@@ -10,6 +10,8 @@ import Services from "@/pages/Services";
 import Diagnosis from "@/pages/Diagnosis";
 import AdminPortal from "@/pages/AdminPortal";
 import QuoteApproval from "@/pages/QuoteApproval";
+import GenerateEmailPage from "@/pages/GenerateEmailPage";
+import GeneratePdfPage from "@/pages/GeneratePdfPage";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 
@@ -31,6 +33,8 @@ function Router() {
         <Route path="/services" component={Services} />
         <Route path="/diagnosis" component={Diagnosis} />
         <Route path="/admin" component={AdminPortal} />
+        <Route path="/generate-email" component={GenerateEmailPage} />
+        <Route path="/generate-pdf" component={GeneratePdfPage} />
         <Route path="/quote/:token" component={QuoteApproval} />
         <Route component={NotFound} />
       </Switch>

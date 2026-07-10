@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import {
+  documentTypeSchema,
   billingModelSchema,
   clientStatusSchema,
   invoiceStatusSchema,
+  insertDocumentComposerDraftSchema,
   projectLifecycleStatusSchema,
   insertClientSchema,
   insertInvoiceSchema,
@@ -311,6 +313,69 @@ export const adminQuoteConversionResultSchema = z.object({
   invoice: adminInvoiceSchema,
 });
 
+export const documentComposerSectionSchema = z.object({
+  id: z.string().min(1),
+  heading: z.string(),
+  content: z.string(),
+});
+
+export const documentComposerStateSchema = z.object({
+  documentType: documentTypeSchema,
+  draftName: z.string(),
+  documentTitle: z.string(),
+  clientName: z.string(),
+  date: z.string(),
+  referenceNumber: z.string(),
+  footer: z.string(),
+  recipientName: z.string(),
+  recipientEmail: z.string(),
+  subjectLine: z.string(),
+  intro: z.string(),
+  summary: z.string(),
+  closing: z.string(),
+  signatureName: z.string(),
+  signatureRole: z.string(),
+  sections: z.array(documentComposerSectionSchema),
+  bodyNotes: z.string(),
+});
+
+export const documentFrontmatterOverridesSchema = z.object({
+  documentTitle: z.string().optional(),
+  clientName: z.string().optional(),
+  date: z.string().optional(),
+  referenceNumber: z.string().optional(),
+  footer: z.string().optional(),
+  recipientName: z.string().optional(),
+  recipientEmail: z.string().optional(),
+  subjectLine: z.string().optional(),
+  documentType: z.string().optional(),
+});
+
+export const generatePdfRequestSchema = z.object({
+  markdown: z.string().min(1).max(120_000),
+  fileName: z.string().max(200).optional(),
+  overrides: documentFrontmatterOverridesSchema.optional(),
+  useReferenceBackground: z.boolean().optional(),
+});
+
+export const documentComposerDraftSchema = z.object({
+  id: z.number(),
+  ownerEmail: z.string().email(),
+  name: z.string(),
+  documentType: documentTypeSchema,
+  markdown: z.string(),
+  composerState: documentComposerStateSchema,
+  createdAt: jsonDate,
+  updatedAt: jsonDate,
+});
+
+export const documentComposerDraftSaveSchema = insertDocumentComposerDraftSchema
+  .omit({ ownerEmail: true })
+  .extend({
+    id: z.number().optional(),
+    composerState: documentComposerStateSchema,
+  });
+
 export type AdminSession = z.infer<typeof adminSessionSchema>;
 export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
 export type AdminDashboardSummary = z.infer<typeof adminDashboardSummarySchema>;
@@ -326,6 +391,11 @@ export type AdminUpdateSubscriptionInput = z.infer<typeof adminUpdateSubscriptio
 export type AdminSubscriptionEvent = z.infer<typeof adminSubscriptionEventSchema>;
 export type PublicQuote = z.infer<typeof publicQuoteSchema>;
 export type AdminQuoteConversionResult = z.infer<typeof adminQuoteConversionResultSchema>;
+export type DocumentComposerSection = z.infer<typeof documentComposerSectionSchema>;
+export type DocumentComposerState = z.infer<typeof documentComposerStateSchema>;
+export type GeneratePdfRequest = z.infer<typeof generatePdfRequestSchema>;
+export type DocumentComposerDraft = z.infer<typeof documentComposerDraftSchema>;
+export type DocumentComposerDraftSaveInput = z.infer<typeof documentComposerDraftSaveSchema>;
 
 export const errorSchemas = {
   validation: z.object({
@@ -510,6 +580,48 @@ export const api = {
       responses: {
         201: z.custom<typeof inquiries.$inferSelect>(),
         400: errorSchemas.validation,
+      },
+    },
+  },
+  documents: {
+    generatePdf: {
+      method: 'POST' as const,
+      path: '/api/generate-pdf',
+      input: generatePdfRequestSchema,
+      responses: {
+        400: errorSchemas.validation,
+        401: errorSchemas.validation,
+        500: errorSchemas.internal,
+      },
+    },
+    drafts: {
+      list: {
+        method: 'GET' as const,
+        path: '/api/document-drafts',
+        responses: {
+          200: z.array(documentComposerDraftSchema),
+          401: errorSchemas.validation,
+        },
+      },
+      save: {
+        method: 'POST' as const,
+        path: '/api/document-drafts',
+        input: documentComposerDraftSaveSchema,
+        responses: {
+          200: documentComposerDraftSchema,
+          201: documentComposerDraftSchema,
+          400: errorSchemas.validation,
+          401: errorSchemas.validation,
+        },
+      },
+      delete: {
+        method: 'DELETE' as const,
+        path: '/api/document-drafts/:draftId',
+        responses: {
+          200: z.object({ success: z.literal(true) }),
+          401: errorSchemas.validation,
+          404: errorSchemas.validation,
+        },
       },
     },
   },

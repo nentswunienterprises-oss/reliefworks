@@ -5,6 +5,8 @@
     { "source": "/services", "destination": "/index.html" },
     { "source": "/diagnosis", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
+    { "source": "/generate-email", "destination": "/index.html" },
+    { "source": "/generate-pdf", "destination": "/index.html" },
     { "source": "/quote/:path*", "destination": "/index.html" }
   ]
 }

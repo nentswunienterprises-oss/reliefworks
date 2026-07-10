@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   numeric,
   pgTable,
   serial,
@@ -23,6 +24,7 @@ export const subscriptionStatusOptions = ["pending", "active", "paused", "cancel
 export const subscriptionIntervalOptions = ["month", "year"] as const;
 export const paymentProviderOptions = ["payfast"] as const;
 export const paymentTermsTypeOptions = ["full_upfront", "split_50_50", "milestone", "retainer", "custom"] as const;
+export const documentTypeOptions = ["letter", "proposal", "quotation"] as const;
 
 export const pressureTypeSchema = z.enum(pressureTypeOptions);
 export const clientStatusSchema = z.enum(clientStatusOptions);
@@ -36,6 +38,7 @@ export const subscriptionStatusSchema = z.enum(subscriptionStatusOptions);
 export const subscriptionIntervalSchema = z.enum(subscriptionIntervalOptions);
 export const paymentProviderSchema = z.enum(paymentProviderOptions);
 export const paymentTermsTypeSchema = z.enum(paymentTermsTypeOptions);
+export const documentTypeSchema = z.enum(documentTypeOptions);
 
 export const inquiries = pgTable("inquiries", {
   id: serial("id").primaryKey(),
@@ -197,6 +200,17 @@ export const subscriptionStatusEvents = pgTable("subscription_status_events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const documentComposerDrafts = pgTable("document_composer_drafts", {
+  id: serial("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  name: text("name").notNull(),
+  documentType: varchar("document_type", { length: 40 }).notNull(),
+  markdown: text("markdown").notNull(),
+  composerState: jsonb("composer_state").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const insertInquirySchema = createInsertSchema(inquiries).omit({ 
   id: true, 
   createdAt: true 
@@ -273,6 +287,15 @@ export const insertSubscriptionStatusEventSchema = createInsertSchema(subscripti
   toStatus: subscriptionStatusSchema,
 });
 
+export const insertDocumentComposerDraftSchema = createInsertSchema(documentComposerDrafts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  documentType: documentTypeSchema,
+  composerState: z.record(z.any()),
+});
+
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type Inquiry = typeof inquiries.$inferSelect;
 export type PressureType = z.infer<typeof pressureTypeSchema>;
@@ -305,3 +328,6 @@ export type PaymentProvider = z.infer<typeof paymentProviderSchema>;
 export type PaymentTermsType = z.infer<typeof paymentTermsTypeSchema>;
 export type InsertSubscriptionStatusEvent = z.infer<typeof insertSubscriptionStatusEventSchema>;
 export type SubscriptionStatusEvent = typeof subscriptionStatusEvents.$inferSelect;
+export type DocumentType = z.infer<typeof documentTypeSchema>;
+export type InsertDocumentComposerDraft = z.infer<typeof insertDocumentComposerDraftSchema>;
+export type DocumentComposerDraft = typeof documentComposerDrafts.$inferSelect;

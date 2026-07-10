@@ -1,4 +1,5 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { Link } from "wouter";
 
 import { ScopeRichText } from "@/components/ScopeRichText";
 import { PaymentTermsSummary } from "@/components/PaymentTermsSummary";
@@ -417,6 +418,16 @@ export function AdminWorkspace({
             <p className="mt-3 text-lg font-medium text-foreground">{sessionName || "Admin"}</p>
             <p className="text-sm text-muted-foreground">{sessionEmail || "No email configured"}</p>
             <div className="mt-5 flex flex-wrap gap-3">
+              <Button asChild variant="outline">
+                <Link href="/generate-email">
+                  Email Generator
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/generate-pdf">
+                  PDF Generator
+                </Link>
+              </Button>
               {hasFocus ? (
                 <Button type="button" variant="outline" onClick={() => onSelectClient("")}>
                   Exit Focus Mode

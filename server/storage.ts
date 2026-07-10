@@ -1,5 +1,10 @@
-import { db, ensureCommercialSchemaCompatibility } from "./db.ts";
 import {
+  db,
+  ensureCommercialSchemaCompatibility,
+  ensureDocumentComposerSchemaCompatibility,
+} from "./db.ts";
+import {
+  and,
   asc,
   desc,
   eq,
@@ -7,8 +12,10 @@ import {
 } from "drizzle-orm";
 import {
   clients,
+  documentComposerDrafts,
   inquiries,
   type InvoiceStatus,
+  type InsertDocumentComposerDraft,
   type InsertInvoice,
   type InsertQuote,
   type InsertSubscription,
@@ -133,6 +140,17 @@ export interface AdminSubscriptionEventRecord {
   createdAt: Date;
 }
 
+export interface DocumentComposerDraftRecord {
+  id: number;
+  ownerEmail: string;
+  name: string;
+  documentType: string;
+  markdown: string;
+  composerState: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
   getAdminDashboardSummary(): Promise<AdminDashboardSummary>;
@@ -190,6 +208,11 @@ export interface IStorage {
     currentPeriodEnd?: Date | null;
     note?: string;
   }): Promise<AdminSubscriptionRecord | null>;
+  listDocumentComposerDrafts(ownerEmail: string): Promise<DocumentComposerDraftRecord[]>;
+  saveDocumentComposerDraft(
+    input: InsertDocumentComposerDraft & { id?: number },
+  ): Promise<DocumentComposerDraftRecord>;
+  deleteDocumentComposerDraft(id: number, ownerEmail: string): Promise<boolean>;
 }
 
 const projectLifecycleStatusSql = sql<ProjectLifecycleStatus>`case
@@ -216,6 +239,10 @@ end`;
 export class DatabaseStorage implements IStorage {
   private async ensureCommercialSchema() {
     await ensureCommercialSchemaCompatibility();
+  }
+
+  private async ensureDocumentComposerSchema() {
+    await ensureDocumentComposerSchemaCompatibility();
   }
 
   async createInquiry(insertInquiry: InsertInquiry): Promise<Inquiry> {
@@ -1073,6 +1100,75 @@ export class DatabaseStorage implements IStorage {
     return rows[0]
       ? { invoice: rows[0], statusChanged }
       : null;
+  }
+
+  async listDocumentComposerDrafts(ownerEmail: string): Promise<DocumentComposerDraftRecord[]> {
+    await this.ensureDocumentComposerSchema();
+
+    return db
+      .select()
+      .from(documentComposerDrafts)
+      .where(eq(documentComposerDrafts.ownerEmail, ownerEmail))
+      .orderBy(desc(documentComposerDrafts.updatedAt));
+  }
+
+  async saveDocumentComposerDraft(
+    input: InsertDocumentComposerDraft & { id?: number },
+  ): Promise<DocumentComposerDraftRecord> {
+    await this.ensureDocumentComposerSchema();
+
+    const draftValues: InsertDocumentComposerDraft = {
+      ownerEmail: input.ownerEmail,
+      name: input.name,
+      documentType: input.documentType,
+      markdown: input.markdown,
+      composerState: input.composerState,
+    };
+
+    if (input.id) {
+      const rows = await db
+        .update(documentComposerDrafts)
+        .set({
+          name: draftValues.name,
+          documentType: draftValues.documentType,
+          markdown: draftValues.markdown,
+          composerState: draftValues.composerState,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(documentComposerDrafts.id, input.id),
+            eq(documentComposerDrafts.ownerEmail, input.ownerEmail),
+          ),
+        )
+        .returning();
+
+      if (rows[0]) {
+        return rows[0];
+      }
+    }
+
+    const [draft] = await db.insert(documentComposerDrafts).values(draftValues).returning();
+    return draft;
+  }
+
+  async deleteDocumentComposerDraft(id: number, ownerEmail: string): Promise<boolean> {
+    await this.ensureDocumentComposerSchema();
+
+    const rows = await db
+      .delete(documentComposerDrafts)
+      .where(
+        and(
+          eq(documentComposerDrafts.id, id),
+          eq(documentComposerDrafts.ownerEmail, ownerEmail),
+        ),
+      )
+      .returning({
+        id: documentComposerDrafts.id,
+        ownerEmail: documentComposerDrafts.ownerEmail,
+      });
+
+    return rows.length > 0;
   }
 }
 

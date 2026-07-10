@@ -11,6 +11,7 @@ import { sendTransactionalEmail } from "./email.ts";
 import { storage } from "./storage.ts";
 import { api } from "@shared/routes";
 import type { SubscriptionStatus, SupportedCurrency } from "@shared/schema";
+import { generatePdfBuffer } from "../relief-works-letterhead-system/pdf-service.ts";
 import { z } from "zod";
 
 function generateQuoteNumber() {
@@ -135,6 +136,34 @@ const requireAdmin: RequestHandler = (req, res, next) => {
 
   next();
 };
+
+const pdfRateWindowMs = 60_000;
+const pdfRateLimit = 12;
+const pdfRequestBuckets = new Map<string, number[]>();
+
+function sanitizeDownloadName(value: string | undefined) {
+  const normalised = (value || "relief-works-document")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return normalised || "relief-works-document";
+}
+
+function enforcePdfRateLimit(identifier: string) {
+  const now = Date.now();
+  const bucket = pdfRequestBuckets.get(identifier) ?? [];
+  const activeWindow = bucket.filter((entry) => now - entry < pdfRateWindowMs);
+
+  if (activeWindow.length >= pdfRateLimit) {
+    return false;
+  }
+
+  activeWindow.push(now);
+  pdfRequestBuckets.set(identifier, activeWindow);
+  return true;
+}
 
 const payfastItnInputSchema = z.object({
   m_payment_id: z.string().min(1),
@@ -490,6 +519,84 @@ export function registerRoutes(app: Express) {
 
   app.post(api.admin.logout.path, (_req, res) => {
     clearAdminAuthCookie(res);
+    res.json({ success: true });
+  });
+
+  app.post(api.documents.generatePdf.path, requireAdmin, async (req, res) => {
+    try {
+      const rateKey = req.adminUser?.email ?? req.ip ?? "unknown";
+      if (!enforcePdfRateLimit(rateKey)) {
+        return res.status(429).json({ message: "PDF generation rate limit exceeded" });
+      }
+
+      const input = api.documents.generatePdf.input.parse(req.body);
+      const pdf = await generatePdfBuffer({
+        markdown: input.markdown,
+        overrides: input.overrides,
+        useReferenceBackground: input.useReferenceBackground,
+      });
+      const fileName = sanitizeDownloadName(input.fileName || pdf.fileName);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}.pdf"`);
+      res.send(pdf.buffer);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0]?.message || "Invalid PDF request",
+          field: err.errors[0]?.path.join("."),
+        });
+      }
+
+      console.error("PDF generation failed:", err);
+      return res.status(500).json({ message: "Unable to generate PDF" });
+    }
+  });
+
+  app.get(api.documents.drafts.list.path, requireAdmin, async (req, res) => {
+    const drafts = await storage.listDocumentComposerDrafts(req.adminUser!.email);
+    res.json(drafts);
+  });
+
+  app.post(api.documents.drafts.save.path, requireAdmin, async (req, res) => {
+    try {
+      const input = api.documents.drafts.save.input.parse(req.body);
+      const existingDraftIds = new Set(
+        (await storage.listDocumentComposerDrafts(req.adminUser!.email)).map((draft) => draft.id),
+      );
+      const savedDraft = await storage.saveDocumentComposerDraft({
+        id: input.id,
+        ownerEmail: req.adminUser!.email,
+        name: input.name,
+        documentType: input.documentType,
+        markdown: input.markdown,
+        composerState: input.composerState,
+      });
+
+      res.status(existingDraftIds.has(savedDraft.id) ? 200 : 201).json(savedDraft);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0]?.message || "Invalid draft payload",
+          field: err.errors[0]?.path.join("."),
+        });
+      }
+      throw err;
+    }
+  });
+
+  app.delete(api.documents.drafts.delete.path, requireAdmin, async (req, res) => {
+    const draftId = Number(req.params.draftId);
+
+    if (!Number.isInteger(draftId) || draftId <= 0) {
+      return res.status(400).json({ message: "Invalid draft id" });
+    }
+
+    const deleted = await storage.deleteDocumentComposerDraft(draftId, req.adminUser!.email);
+    if (!deleted) {
+      return res.status(404).json({ message: "Draft not found" });
+    }
+
     res.json({ success: true });
   });
 
