@@ -172,7 +172,7 @@ export function DiagnosisForm() {
                             "flex min-h-[88px] cursor-pointer items-start gap-3 rounded-md border px-4 py-4 transition-colors",
                             "bg-background text-foreground",
                             isSelected
-                              ? "border-primary bg-primary/5"
+                              ? "border-primary bg-background ring-1 ring-primary/40"
                               : "border-border/50 hover:border-primary/40"
                           )}
                         >
