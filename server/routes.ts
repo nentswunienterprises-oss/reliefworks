@@ -561,10 +561,7 @@ export function registerRoutes(app: Express) {
   app.post(api.documents.drafts.save.path, requireAdmin, async (req, res) => {
     try {
       const input = api.documents.drafts.save.input.parse(req.body);
-      const existingDraftIds = new Set(
-        (await storage.listDocumentComposerDrafts(req.adminUser!.email)).map((draft) => draft.id),
-      );
-      const savedDraft = await storage.saveDocumentComposerDraft({
+      const { draft: savedDraft, created } = await storage.saveDocumentComposerDraft({
         id: input.id,
         ownerEmail: req.adminUser!.email,
         name: input.name,
@@ -573,7 +570,7 @@ export function registerRoutes(app: Express) {
         composerState: input.composerState,
       });
 
-      res.status(existingDraftIds.has(savedDraft.id) ? 200 : 201).json(savedDraft);
+      res.status(created ? 201 : 200).json(savedDraft);
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({

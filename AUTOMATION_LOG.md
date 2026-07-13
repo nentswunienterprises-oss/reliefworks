@@ -66,8 +66,8 @@ const res = await fetch(`${API_URL}${api.inquiries.create.path}`, ...);
 ### 1. **.env**
 **Content**: All Supabase credentials configured
 ```
-DATABASE_URL=postgresql://postgres:Rapismylife20@...
-SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+DATABASE_URL=postgresql://postgres:your_url_encoded_password@db.qwtrkqolpsclidiqpoff.supabase.co:5432/postgres
+SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
 NODE_ENV=development
 PORT=5000
@@ -87,8 +87,8 @@ VITE_API_URL=http://localhost:5000
 **Content**: Railway-specific deployment configuration
 ```toml
 [env]
-DATABASE_URL = "postgresql://postgres:Rapismylife20@..."
-SUPABASE_URL = "https://pzqhneluoquohtskfwkr.supabase.co"
+DATABASE_URL = "postgresql://postgres:your_url_encoded_password@db.qwtrkqolpsclidiqpoff.supabase.co:5432/postgres"
+SUPABASE_URL = "https://qwtrkqolpsclidiqpoff.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY = "eyJhbGc..."
 NODE_ENV = "production"
 PORT = "5000"
@@ -226,7 +226,7 @@ dist/
 | Var | Value | Service | Source |
 |-----|-------|---------|--------|
 | `DATABASE_URL` | `postgresql://...` | Railway | Supabase |
-| `SUPABASE_URL` | `https://pzqhneluoquohtskfwkr.supabase.co` | Railway | Supabase |
+| `SUPABASE_URL` | `https://qwtrkqolpsclidiqpoff.supabase.co` | Railway | Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGc...` | Railway | Supabase |
 | `SUPABASE_ANON_KEY` | `eyJhbGc...` | Vercel | Supabase |
 | `NODE_ENV` | `production` | Railway | Manual |

@@ -102,7 +102,7 @@ CREATE POLICY "Allow viewing all" ON inquiries
 4. Output Directory: `dist/public`
 5. Environment Variable:
    ```
-   VITE_SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+   VITE_SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
    ```
 6. **Deploy**
 
@@ -159,10 +159,10 @@ git push
 
 | Item | Value |
 |------|-------|
-| Supabase URL | `https://pzqhneluoquohtskfwkr.supabase.co` |
+| Supabase URL | `https://qwtrkqolpsclidiqpoff.supabase.co` |
 | Anon Key | `eyJhbGc...` (starts with anon) |
 | Service Key | `eyJhbGc...` (starts with service) |
-| Edge Function | `https://pzqhneluoquohtskfwkr.supabase.co/functions/v1/create-inquiry` |
+| Edge Function | `https://qwtrkqolpsclidiqpoff.supabase.co/functions/v1/create-inquiry` |
 
 ---
 

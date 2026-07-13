@@ -29,7 +29,7 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   define: {
     "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
-      process.env.VITE_SUPABASE_URL || "https://pzqhneluoquohtskfwkr.supabase.co"
+      process.env.VITE_SUPABASE_URL || "https://qwtrkqolpsclidiqpoff.supabase.co"
     ),
   },
   build: {

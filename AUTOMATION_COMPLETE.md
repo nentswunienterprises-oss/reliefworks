@@ -44,7 +44,7 @@
 
 ### Supabase (Database)
 ```
-URL:     https://pzqhneluoquohtskfwkr.supabase.co
+URL:     https://qwtrkqolpsclidiqpoff.supabase.co
 Anon:    eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6cWhuZWx1b3F1b2h0c2tmd2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MDk1MzgsImV4cCI6MjA4NTE4NTUzOH0.1OLP9llu3dZyZxjLlIEpkwRzMK4ryp-2YmBrQDVuD00
 Service: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6cWhuZWx1b3F1b2h0c2tmd2tyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTYwOTUzOCwiZXhwIjoyMDg1MTg1NTM4fQ.0O70N8dP08Vxlf7YUqkEWQ5BYMJQJd230Thl_5B2y5Q
 ```

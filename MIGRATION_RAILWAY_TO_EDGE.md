@@ -35,7 +35,7 @@ const res = await fetch(`${API_URL}${api.inquiries.create.path}`, ...);
 
 **After:**
 ```typescript
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://pzqhneluoquohtskfwkr.supabase.co";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://qwtrkqolpsclidiqpoff.supabase.co";
 const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/create-inquiry`;
 const res = await fetch(EDGE_FUNCTION_URL, ...);
 ```
@@ -52,7 +52,7 @@ PORT=5000
 
 **After:**
 ```
-VITE_SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+VITE_SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
 ```
 
 Much simpler! 🎉
@@ -84,7 +84,7 @@ git push
 ### 4. Deploy to Vercel (5 min)
 
 1. Vercel Dashboard → Import GitHub repo
-2. Set `VITE_SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co`
+2. Set `VITE_SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co`
 3. Deploy
 
 ### 5. Test (1 min)

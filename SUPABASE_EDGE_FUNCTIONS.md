@@ -226,7 +226,7 @@ CREATE POLICY "Allow viewing all" ON inquiries
 
 4. **Environment Variables:**
    ```
-   VITE_SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+   VITE_SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
    ```
 
 5. Click **Deploy**
@@ -242,7 +242,7 @@ CREATE POLICY "Allow viewing all" ON inquiries
 ### 1. Test Edge Function Directly
 
 ```bash
-curl -X POST https://pzqhneluoquohtskfwkr.supabase.co/functions/v1/create-inquiry \
+curl -X POST https://qwtrkqolpsclidiqpoff.supabase.co/functions/v1/create-inquiry \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Test User",
@@ -281,10 +281,10 @@ npm install
 
 Your `.env` is already configured:
 ```
-SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
 SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
-VITE_SUPABASE_URL=https://pzqhneluoquohtskfwkr.supabase.co
+VITE_SUPABASE_URL=https://qwtrkqolpsclidiqpoff.supabase.co
 ```
 
 ### 3. Run Locally

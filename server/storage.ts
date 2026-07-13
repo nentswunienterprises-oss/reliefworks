@@ -151,6 +151,11 @@ export interface DocumentComposerDraftRecord {
   updatedAt: Date;
 }
 
+export interface SaveDocumentComposerDraftResult {
+  draft: DocumentComposerDraftRecord;
+  created: boolean;
+}
+
 export interface IStorage {
   createInquiry(inquiry: InsertInquiry): Promise<Inquiry>;
   getAdminDashboardSummary(): Promise<AdminDashboardSummary>;
@@ -211,7 +216,7 @@ export interface IStorage {
   listDocumentComposerDrafts(ownerEmail: string): Promise<DocumentComposerDraftRecord[]>;
   saveDocumentComposerDraft(
     input: InsertDocumentComposerDraft & { id?: number },
-  ): Promise<DocumentComposerDraftRecord>;
+  ): Promise<SaveDocumentComposerDraftResult>;
   deleteDocumentComposerDraft(id: number, ownerEmail: string): Promise<boolean>;
 }
 
@@ -1114,7 +1119,7 @@ export class DatabaseStorage implements IStorage {
 
   async saveDocumentComposerDraft(
     input: InsertDocumentComposerDraft & { id?: number },
-  ): Promise<DocumentComposerDraftRecord> {
+  ): Promise<SaveDocumentComposerDraftResult> {
     await this.ensureDocumentComposerSchema();
 
     const draftValues: InsertDocumentComposerDraft = {
@@ -1144,12 +1149,18 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       if (rows[0]) {
-        return rows[0];
+        return {
+          draft: rows[0],
+          created: false,
+        };
       }
     }
 
     const [draft] = await db.insert(documentComposerDrafts).values(draftValues).returning();
-    return draft;
+    return {
+      draft,
+      created: true,
+    };
   }
 
   async deleteDocumentComposerDraft(id: number, ownerEmail: string): Promise<boolean> {
